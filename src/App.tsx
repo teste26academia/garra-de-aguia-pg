@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { UserRole, Aluno, Turma, Presenca, HistoricoGraduacao, Pagamento, GraduacaoSash, GlobalConfigs } from "./types";
+import { UserRole, Aluno, Turma, Instrutor, Presenca, HistoricoGraduacao, Pagamento, GlobalConfigs, Exame, Produto, Venda, Familia, AlunoModalidade, GraduacoesConfig } from "./types";
 import {
   INITIAL_ALUNOS,
   INITIAL_TURMAS,
@@ -9,6 +9,7 @@ import {
   INITIAL_CONFIG
 } from "./data/mockData";
 import AdminPanel from "./components/AdminPanel";
+import FichaAlunoModal from "./components/FichaAlunoModal";
 import InstructorPanel from "./components/InstructorPanel";
 import StudentPanel from "./components/StudentPanel";
 import DocumentationView from "./components/DocumentationView";
@@ -34,6 +35,97 @@ import {
   getDoc,
   getDocs
 } from "firebase/firestore";
+
+const KUNG_FU_GRADUATIONS = [
+  { ordem: 1, graduacao: "Preparatória", faixa: "Branca" },
+  { ordem: 2, graduacao: "1ª Fase", faixa: "Branca Ponta Amarela" },
+  { ordem: 3, graduacao: "2ª Fase", faixa: "Branca Ponta Verde" },
+  { ordem: 4, graduacao: "3ª Fase", faixa: "Verde" },
+  { ordem: 5, graduacao: "4ª Fase", faixa: "Verde Ponta Marrom" },
+  { ordem: 6, graduacao: "5ª Fase", faixa: "Marrom" },
+  { ordem: 7, graduacao: "6ª Fase", faixa: "Marrom Ponta Preta" },
+  { ordem: 8, graduacao: "7ª Fase", faixa: "Preta" },
+  { ordem: 9, graduacao: "1º Dhuen", faixa: "Preta" },
+  { ordem: 10, graduacao: "2º Dhuen", faixa: "Preta" }
+];
+
+const TAI_CHI_GRADUATIONS = [
+  { ordem: 1, graduacao: "Preparatória", faixa: "Branca" },
+  { ordem: 2, graduacao: "1ª Fase", faixa: "Branca Ponta Amarela" },
+  { ordem: 3, graduacao: "2ª Fase", faixa: "Branca Ponta Verde" },
+  { ordem: 4, graduacao: "3ª Fase", faixa: "Verde" }
+];
+
+const BOXE_CHINES_GRADUATIONS = [
+  { ordem: 1, graduacao: "Preparatória", faixa: "Branca" },
+  { ordem: 2, graduacao: "1ª Fase", faixa: "Laranja" },
+  { ordem: 3, graduacao: "2ª Fase", faixa: "Vermelha" },
+  { ordem: 4, graduacao: "3ª Fase", faixa: "Azul" },
+  { ordem: 5, graduacao: "4ª Fase", faixa: "Marrom" },
+  { ordem: 6, graduacao: "5ª Fase", faixa: "Preta" }
+];
+
+function getSubModalityGradeAndFaixa(modName: string, gradName: string) {
+  let list = KUNG_FU_GRADUATIONS;
+  if (modName === "Tai Chi Chuan") list = TAI_CHI_GRADUATIONS;
+  if (modName === "Boxe Chinês") list = BOXE_CHINES_GRADUATIONS;
+
+  const target = (gradName || "").toLowerCase().trim();
+
+  // Try to find an exact match or substring match or if target contains graduacao or faixa
+  const matched = list.find(g => {
+    const fullGradAndFaixa = `${g.graduacao} - ${g.faixa}`.toLowerCase();
+    return fullGradAndFaixa === target ||
+           fullGradAndFaixa.includes(target) || 
+           target.includes(g.graduacao.toLowerCase()) ||
+           (g.faixa !== "Branca" && target.includes(g.faixa.toLowerCase()));
+  });
+
+  if (matched) {
+    return {
+      graduacao: matched.graduacao,
+      faixa: matched.faixa,
+      ordem: matched.ordem
+    };
+  }
+
+  // Fallbacks: if "amarela/laranja/vermelha/verde/azul/marrom/preta"
+  if (target.includes("amarela")) {
+    const item = list.find(g => g.faixa.toLowerCase().includes("amarela") || g.graduacao.toLowerCase().includes("1ª"));
+    if (item) return { graduacao: item.graduacao, faixa: item.faixa, ordem: item.ordem };
+  }
+  if (target.includes("laranja")) {
+    const item = list.find(g => g.faixa.toLowerCase().includes("laranja"));
+    if (item) return { graduacao: item.graduacao, faixa: item.faixa, ordem: item.ordem };
+  }
+  if (target.includes("vermelha")) {
+    const item = list.find(g => g.faixa.toLowerCase().includes("vermelha"));
+    if (item) return { graduacao: item.graduacao, faixa: item.faixa, ordem: item.ordem };
+  }
+  if (target.includes("verde")) {
+    const item = list.find(g => g.faixa.toLowerCase().includes("verde") || g.graduacao.toLowerCase().includes("3ª"));
+    if (item) return { graduacao: item.graduacao, faixa: item.faixa, ordem: item.ordem };
+  }
+  if (target.includes("azul")) {
+    const item = list.find(g => g.faixa.toLowerCase().includes("azul"));
+    if (item) return { graduacao: item.graduacao, faixa: item.faixa, ordem: item.ordem };
+  }
+  if (target.includes("marrom")) {
+    const item = list.find(g => g.faixa.toLowerCase().includes("marrom"));
+    if (item) return { graduacao: item.graduacao, faixa: item.faixa, ordem: item.ordem };
+  }
+  if (target.includes("preta")) {
+    const item = list.find(g => g.faixa.toLowerCase().includes("preta") || g.graduacao.toLowerCase().includes("preta"));
+    if (item) return { graduacao: item.graduacao, faixa: item.faixa, ordem: item.ordem };
+  }
+
+  // Default fallback
+  return {
+    graduacao: list[0].graduacao,
+    faixa: list[0].faixa,
+    ordem: list[0].ordem
+  };
+}
 
 export default function App() {
   const { 
@@ -65,8 +157,22 @@ export default function App() {
   const [presenceFilter, setPresenceFilter] = useState<"PENDING" | "APPROVED" | "REJECTED">("PENDING");
 
   // Aluno-specific state
+  const [filterStatus, setFilterStatus] = useState<"ATIVOS" | "INATIVOS" | "PENDENTES" | "TODOS">("ATIVOS");
   const [selectedCheckinDate, setSelectedCheckinDate] = useState<string>(new Date().toISOString().split("T")[0]);
   const [studentStatusMsg, setStudentStatusMsg] = useState<string>("");
+  const [selectedFichaAluno, setSelectedFichaAluno] = useState<Aluno | null>(null);
+  const [editingAlunoForForm, setEditingAlunoForForm] = useState<Aluno | null>(null);
+
+  // Exames manual registry states
+  const [alunoSelecionadoExame, setAlunoSelecionadoExame] = useState<Aluno | null>(null);
+  const [exameModalidade, setExameModalidade] = useState<string>("Kung Fu");
+  const [exameGradPretendida, setExameGradPretendida] = useState<string>("Preparatória");
+  const [exameData, setExameData] = useState<string>(new Date().toISOString().split("T")[0]);
+  const [exameNotaTec, setExameNotaTec] = useState<number>(8);
+  const [exameNotaTeor, setExameNotaTeor] = useState<number>(8);
+  const [exameAvaliador, setExameAvaliador] = useState<string>("Professor Décio");
+  const [exameStatus, setExameStatus] = useState<"Aprovado" | "Reprovado" | "Pendente">("Aprovado");
+  const [exameObs, setExameObs] = useState<string>("");
 
   // Logo asset load tracking states (Permanent Brand Protection Rule)
   const [headerLogoError, setHeaderLogoError] = useState<boolean>(false);
@@ -79,6 +185,13 @@ export default function App() {
   const [graduacoes, setGraduacoes] = useState<HistoricoGraduacao[]>([]);
   const [pagamentos, setPagamentos] = useState<Pagamento[]>([]);
   const [config, setConfig] = useState<GlobalConfigs>(INITIAL_CONFIG);
+  const [exames, setExames] = useState<Exame[]>([]);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [vendas, setVendas] = useState<Venda[]>([]);
+  const [familias, setFamilias] = useState<Familia[]>([]);
+  const [instrutores, setInstrutores] = useState<Instrutor[]>([]);
+  const [alunoModalidades, setAlunoModalidades] = useState<AlunoModalidade[]>([]);
+  const [graduacoesConfig, setGraduacoesConfig] = useState<GraduacoesConfig[]>([]);
   const [isSyncingUsers, setIsSyncingUsers] = useState<boolean>(false);
 
   // DB Sync Status States
@@ -168,18 +281,18 @@ export default function App() {
       const turmasRef = collection(db, "turmas");
       const unsubTurmas = onSnapshot(turmasRef, async (querySnapshot) => {
         if (querySnapshot.empty) {
-          console.log("Banco de dados do Firestore limpo para turmas, utilizando cronograma local.");
-          setTurmas(INITIAL_TURMAS);
+          console.log("Banco de dados do Firestore limpo para turmas.");
+          setTurmas([]);
         } else {
           const list: Turma[] = [];
           querySnapshot.forEach((doc) => {
-            list.push(doc.data() as Turma);
+            list.push({ id: doc.id, ...doc.data() } as Turma);
           });
           setTurmas(list);
         }
       }, (err) => {
-        console.warn("Utilizando cronograma de turmas padrão local.");
-        setTurmas(INITIAL_TURMAS);
+        console.warn("Utilizando cronograma de turmas lido localmente ou vazio.");
+        setTurmas([]);
       });
       unsubscribes.push(unsubTurmas);
     } catch (e) {
@@ -189,18 +302,24 @@ export default function App() {
     // 3. Alunos live subscription (using Query Enforcer filters for students to match Firestore Security rules)
     try {
       const alunosRef = collection(db, "alunos");
+      const emailVariations = [
+        userProfile?.email || "",
+        (userProfile?.email || "").toLowerCase(),
+        (userProfile?.email || "").toUpperCase()
+      ].filter((v, i, self) => v && self.indexOf(v) === i);
+
       const q = isPowerUser 
         ? alunosRef 
-        : query(alunosRef, where("email", "==", userProfile.email));
+        : query(alunosRef, where("email", "in", emailVariations));
 
-      const unsubAlunos = onSnapshot(q, async (querySnapshot) => {
+      const unsubAlunos = onSnapshot( q, async (querySnapshot) => {
         if (querySnapshot.empty) {
           console.log("Lista de alunos do Firestore retornou vazia, usando dados em memória.");
           setAlunos(isPowerUser ? INITIAL_ALUNOS : []);
         } else {
           const list: Aluno[] = [];
           querySnapshot.forEach((doc) => {
-            list.push(doc.data() as Aluno);
+            list.push({ id: doc.id, ...doc.data() } as Aluno);
           });
           setAlunos(list);
         }
@@ -230,7 +349,7 @@ export default function App() {
           } else {
             const list: Pagamento[] = [];
             querySnapshot.forEach((doc) => {
-              list.push(doc.data() as Pagamento);
+              list.push({ id: doc.id, ...doc.data() } as Pagamento);
             });
             setPagamentos(list);
           }
@@ -263,7 +382,7 @@ export default function App() {
           } else {
             const list: Presenca[] = [];
             querySnapshot.forEach((doc) => {
-              list.push(doc.data() as Presenca);
+              list.push({ id: doc.id, ...doc.data() } as Presenca);
             });
             setPresencas(list);
           }
@@ -281,7 +400,7 @@ export default function App() {
 
     // 6. Exames live subscription
     try {
-      const exRef = collection(db, "exames");
+      const exRef = collection(db, "graduacoes");
       const q = isPowerUser 
         ? exRef 
         : (userProfile.alunoId 
@@ -296,7 +415,7 @@ export default function App() {
           } else {
             const list: HistoricoGraduacao[] = [];
             querySnapshot.forEach((doc) => {
-              list.push(doc.data() as HistoricoGraduacao);
+              list.push({ id: doc.id, ...doc.data() } as HistoricoGraduacao);
             });
             setGraduacoes(list);
           }
@@ -310,6 +429,148 @@ export default function App() {
       }
     } catch (e) {
       console.error("Falha ao configurar sincronização de exames/graduações:", e);
+    }
+
+    // 6.2. exames live subscription
+    try {
+      const examesRef = collection(db, "exames");
+      const q = isPowerUser 
+        ? examesRef 
+        : (userProfile.alunoId 
+            ? query(examesRef, where("alunoId", "==", userProfile.alunoId)) 
+            : null);
+
+      if (q) {
+        const unsubExames = onSnapshot(q, (querySnapshot) => {
+          const list: Exame[] = [];
+          querySnapshot.forEach((doc) => {
+            list.push({ id: doc.id, ...doc.data() } as Exame);
+          });
+          setExames(list);
+        });
+        unsubscribes.push(unsubExames);
+      } else {
+        setExames([]);
+      }
+    } catch (e) {
+      console.error("Falha ao sincronizar exames:", e);
+    }
+
+    // 6.3. produtos live subscription
+    try {
+      const produtosRef = collection(db, "produtos");
+      const unsubProdutos = onSnapshot(produtosRef, (querySnapshot) => {
+        const list: Produto[] = [];
+        querySnapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() } as Produto);
+        });
+        setProdutos(list);
+      });
+      unsubscribes.push(unsubProdutos);
+    } catch (e) {
+      console.error("Falha ao sincronizar produtos:", e);
+    }
+
+    // 6.4. vendas live subscription
+    try {
+      const vendasRef = collection(db, "vendas");
+      const q = isPowerUser 
+        ? vendasRef 
+        : (userProfile.alunoId 
+            ? query(vendasRef, where("alunoId", "==", userProfile.alunoId)) 
+            : null);
+
+      if (q) {
+        const unsubVendas = onSnapshot(q, (querySnapshot) => {
+          const list: Venda[] = [];
+          querySnapshot.forEach((doc) => {
+            list.push({ id: doc.id, ...doc.data() } as Venda);
+          });
+          setVendas(list);
+        });
+        unsubscribes.push(unsubVendas);
+      } else {
+        setVendas([]);
+      }
+    } catch (e) {
+      console.error("Falha ao sincronizar vendas:", e);
+    }
+
+    // 6.5. familias live subscription
+    try {
+      const familiasRef = collection(db, "familias");
+      const unsubFamilias = onSnapshot(familiasRef, (querySnapshot) => {
+        const list: Familia[] = [];
+        querySnapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() } as Familia);
+        });
+        setFamilias(list);
+      });
+      unsubscribes.push(unsubFamilias);
+    } catch (e) {
+      console.error("Falha ao sincronizar familias:", e);
+    }
+
+    // 6.6. instrutores live subscription
+    try {
+      const instRef = collection(db, "instrutores");
+      const unsubInst = onSnapshot(instRef, (querySnapshot) => {
+        const list: Instrutor[] = [];
+        querySnapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() } as Instrutor);
+        });
+        setInstrutores(list);
+      }, (err) => {
+        console.warn("Utilizando lista de instrutores vazia localmente:", err);
+        setInstrutores([]);
+      });
+      unsubscribes.push(unsubInst);
+    } catch (e) {
+      console.error("Falha ao sincronizar instrutores:", e);
+    }
+
+    // 6.7. aluno_modalidades live subscription
+    try {
+      const amRef = collection(db, "aluno_modalidades");
+      const q = isPowerUser 
+        ? amRef 
+        : (userProfile.alunoId 
+            ? query(amRef, where("alunoId", "==", userProfile.alunoId)) 
+            : null);
+
+      if (q) {
+        const unsubAm = onSnapshot(q, (querySnapshot) => {
+          const list: AlunoModalidade[] = [];
+          querySnapshot.forEach((doc) => {
+            list.push({ id: doc.id, ...doc.data() } as AlunoModalidade);
+          });
+          setAlunoModalidades(list);
+        }, (err) => {
+          console.warn("Utilizando lista de aluno_modalidades vazia localmente:", err);
+        });
+        unsubscribes.push(unsubAm);
+      } else {
+        setAlunoModalidades([]);
+      }
+    } catch (e) {
+      console.error("Falha ao sincronizar aluno_modalidades:", e);
+    }
+
+    // 6.8. graduacoes_config live subscription
+    try {
+      const gcRef = collection(db, "graduacoes_config");
+      const unsubGc = onSnapshot(gcRef, (querySnapshot) => {
+        const list: GraduacoesConfig[] = [];
+        querySnapshot.forEach((doc) => {
+          list.push({ id: doc.id, ...doc.data() } as GraduacoesConfig);
+        });
+        setGraduacoesConfig(list);
+      }, (err) => {
+        console.warn("Utilizando lista de graduacoes_config vazia localmente:", err);
+      });
+      unsubscribes.push(unsubGc);
+    } catch (e) {
+      console.error("Falha ao sincronizar graduacoes_config:", e);
     }
 
     // Finish loader
@@ -326,9 +587,146 @@ export default function App() {
   // Rule 2 check: Email deciopadovanijr@gmail.com or profile role is auto-recognized as Master Admin
   const isCurrentlyAdminByEmail = userProfile?.role === "ADMIN" || user?.email === "deciopadovanijr@gmail.com";
 
-  // 1. ADD Student (Admin Form mapped to Firestore)
-  const handleAddAluno = async (newAlunoData: Omit<Aluno, "id" | "statusFinanceiro"> & { id?: string }) => {
+  // Helper to align a student's enrolled modalities with matching entries in "aluno_modalidades"
+  const syncStudentModalitiesRecords = async (studentId: string, newAlunoData: any) => {
+    if (!studentId || studentId === "undefined") {
+      console.warn("syncStudentModalitiesRecords abortado: ID do aluno está indefinido.");
+      return;
+    }
+    if (!newAlunoData) {
+      console.warn("syncStudentModalitiesRecords abortado: dados do aluno estão vazios.");
+      return;
+    }
     try {
+      const officialMods = ["Kung Fu", "Tai Chi Chuan", "Boxe Chinês"];
+      let activeModsInput: string[] = [];
+      if (newAlunoData.modalidades && newAlunoData.modalidades.length > 0) {
+        activeModsInput = newAlunoData.modalidades;
+      } else if (newAlunoData.modalidade) {
+        activeModsInput = String(newAlunoData.modalidade).split(",").map((x: string) => x.trim()).filter(Boolean);
+      } else {
+        activeModsInput = ["Kung Fu"];
+      }
+
+      const normalizedActiveMods = activeModsInput.map((m: string) => {
+        const lowerM = (m || "").toLowerCase();
+        if (lowerM.includes("tai chi") || lowerM.includes("taichi")) return "Tai Chi Chuan";
+        if (lowerM.includes("boxe") || lowerM.includes("sanda")) return "Boxe Chinês";
+        return "Kung Fu";
+      });
+
+      for (const modName of officialMods) {
+        const isEnrolled = (normalizedActiveMods as string[]).includes(modName);
+        const alModId = `am_${studentId}_${modName.replace(/\s+/g, "")}`;
+        const existingRecord = alunoModalidades.find(am => am && am.alunoId === studentId && am.modalidade === modName);
+
+        if (isEnrolled) {
+          if (existingRecord) {
+            await setDoc(doc(db, "aluno_modalidades", alModId), {
+              ...existingRecord,
+              ativo: true
+            }, { merge: true });
+          } else {
+            const legacyRank = newAlunoData.graduacao || newAlunoData.graduacaoAtual || "Preparatória - Branca";
+            const gradeDetails = getSubModalityGradeAndFaixa(modName, legacyRank);
+            await setDoc(doc(db, "aluno_modalidades", alModId), {
+              id: alModId,
+              alunoId: studentId,
+              modalidade: modName,
+              graduacaoAtual: gradeDetails.graduacao || "Preparatória",
+              faixaAtual: gradeDetails.faixa || "Branca",
+              ordemGraduacao: gradeDetails.ordem || 1,
+              dataUltimaGraduacao: newAlunoData.dataUltimaGraduacao || new Date().toISOString().split("T")[0],
+              ativo: true
+            });
+          }
+        } else {
+          if (existingRecord) {
+            await setDoc(doc(db, "aluno_modalidades", alModId), {
+              ...existingRecord,
+              ativo: false
+            }, { merge: true });
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao sincronizar modalidades do aluno no Firestore:", err);
+    }
+  };
+
+  // Manual migration logic for legacy students (admin trigger only)
+  const [migrating, setMigrating] = useState(false);
+  const [migrationStatus, setMigrationStatus] = useState<string | null>(null);
+
+  const handleManualLegacyMigration = async () => {
+    if (!isAdmin && userProfile?.role !== "INSTRUTOR") {
+      setMigrationStatus("Permissão negada para migração.");
+      return;
+    }
+    setMigrating(true);
+    setMigrationStatus("Migrando...");
+    try {
+      let count = 0;
+      for (const student of (alunos || [])) {
+        if (!student || !student.id || student.id === "undefined") {
+          continue;
+        }
+
+        let studentMods: string[] = [];
+        if (student.modalidades && student.modalidades.length > 0) {
+          studentMods = student.modalidades;
+        } else if (student.modalidade) {
+          studentMods = String(student.modalidade).split(",").map((x: string) => x.trim()).filter(Boolean);
+        } else {
+          studentMods = ["Kung Fu"];
+        }
+
+        const normalizedMods = studentMods.map((m: string) => {
+          const lowerM = (m || "").toLowerCase();
+          if (lowerM.includes("tai chi") || lowerM.includes("taichi")) return "Tai Chi Chuan";
+          if (lowerM.includes("boxe") || lowerM.includes("sanda")) return "Boxe Chinês";
+          return "Kung Fu";
+        });
+
+        for (const modName of normalizedMods) {
+          const alModId = `am_${student.id}_${modName.replace(/\s+/g, "")}`;
+          const existing = (alunoModalidades || []).find((am: any) => am && am.alunoId === student.id && am.modalidade === modName);
+          
+          if (!existing) {
+            console.log(`Migrando estrutura do aluno legado ${student.nome || "Sem Nome"} para a modalidade ${modName}`);
+            const legacyRank = student.graduacao || student.graduacaoAtual || "Preparatória - Branca";
+            const gradeDetails = getSubModalityGradeAndFaixa(modName, legacyRank);
+            
+            await setDoc(doc(db, "aluno_modalidades", alModId), {
+              id: alModId,
+              alunoId: student.id,
+              modalidade: modName,
+              graduacaoAtual: gradeDetails.graduacao || "Preparatória",
+              faixaAtual: gradeDetails.faixa || "Branca",
+              ordemGraduacao: gradeDetails.ordem || 1,
+              dataUltimaGraduacao: student.dataUltimaGraduacao || new Date().toISOString().split("T")[0],
+              ativo: true
+            });
+            count++;
+          }
+        }
+      }
+      setMigrationStatus(`Migração concluída! ${count} alunos processados.`);
+    } catch (err: any) {
+      console.error("Falha ao migrar estrutura de modalidades dos alunos:", err);
+      setMigrationStatus(`Erro: ${err?.message || err}`);
+    } finally {
+      setMigrating(false);
+      setTimeout(() => {
+        setMigrationStatus(null);
+      }, 6000);
+    }
+  };
+
+  // 1. ADD Student (Admin Form mapped to Firestore)
+  const handleAddAluno = async (newAlunoData: any) => {
+    try {
+      const formEmail = newAlunoData.email ? newAlunoData.email.trim().toLowerCase() : "";
       if (newAlunoData.id) {
         // Modo de edição
         const existingId = newAlunoData.id;
@@ -336,20 +734,31 @@ export default function App() {
 
         await updateDoc(studentRef, {
           nome: newAlunoData.nome,
-          email: newAlunoData.email,
-          celular: newAlunoData.celular,
+          email: formEmail,
+          celular: newAlunoData.celular || "",
           cpf: newAlunoData.cpf,
-          dataNascimento: newAlunoData.dataNascimento,
-          graduacao: newAlunoData.graduacao,
+          rg: newAlunoData.rg || "",
+          dataNascimento: newAlunoData.dataNascimento || "",
+          graduacao: newAlunoData.graduacao || "Preparatória - Branca",
+          graduacaoAtual: newAlunoData.graduacaoAtual || newAlunoData.graduacao || "Preparatória - Branca",
           turmaId: newAlunoData.turmaId,
-          planoTipo: newAlunoData.planoTipo,
-          mensalidade: newAlunoData.mensalidade,
-          descontoFamiliaTipo: newAlunoData.descontoFamiliaTipo,
-          descontoFamiliaValor: newAlunoData.descontoFamiliaValor,
+          planoTipo: newAlunoData.planoTipo || "2x_semana",
+          mensalidade: newAlunoData.mensalidade || 160,
+          descontoFamiliaTipo: newAlunoData.descontoFamiliaTipo || "nenhum",
+          descontoFamiliaValor: newAlunoData.descontoFamiliaValor || 0,
           observacoes: newAlunoData.observacoes || "",
-          endereco: newAlunoData.endereco || ""
+          endereco: newAlunoData.endereco || "",
+          telefone: newAlunoData.telefone || newAlunoData.celular || "",
+          whatsapp: newAlunoData.whatsapp || newAlunoData.celular || "",
+          responsavel: newAlunoData.responsavel || "",
+          foto: newAlunoData.foto || "",
+          dataMatricula: newAlunoData.dataMatricula || new Date().toISOString().split("T")[0],
+          modalidade: newAlunoData.modalidade || "Kung Fu",
+          statusFinanceiro: newAlunoData.statusFinanceiro || "EM DIA",
+          status: newAlunoData.status || "Ativo"
         });
 
+        await syncStudentModalitiesRecords(existingId, newAlunoData);
         alert("Dados do aluno atualizados com sucesso!");
         return;
       }
@@ -357,26 +766,44 @@ export default function App() {
       const newId = `stu_${Date.now()}`;
       const newAluno: Aluno = {
         ...newAlunoData,
+        email: formEmail,
         id: newId,
-        statusFinanceiro: "Em Dia"
+        userId: newAlunoData.userId || "",
+        statusFinanceiro: newAlunoData.statusFinanceiro || "EM DIA",
+        graduacaoAtual: newAlunoData.graduacaoAtual || newAlunoData.graduacao || "Preparatória - Branca",
+        graduacao: newAlunoData.graduacao || "Preparatória - Branca",
+        telefone: newAlunoData.telefone || newAlunoData.celular || "",
+        whatsapp: newAlunoData.whatsapp || newAlunoData.celular || "",
+        status: newAlunoData.status || "Ativo",
+        modalidade: newAlunoData.modalidade || "Kung Fu",
+        foto: newAlunoData.foto || "",
+        responsavel: newAlunoData.responsavel || "",
+        rg: newAlunoData.rg || "",
+        dataMatricula: newAlunoData.dataMatricula || new Date().toISOString().split("T")[0],
+        dataUltimaGraduacao: newAlunoData.dataUltimaGraduacao || new Date().toISOString().split("T")[0]
       };
 
       await setDoc(doc(db, "alunos", newId), newAluno);
+      await syncStudentModalitiesRecords(newId, newAlunoData);
 
       // Automatically generate first invoice honoring net family discount calculation!
       const discountVal = newAluno.descontoFamiliaTipo === "percentual"
-        ? newAluno.mensalidade - (newAluno.mensalidade * (newAluno.descontoFamiliaValor / 100))
+        ? (newAluno.mensalidade || 160) - ((newAluno.mensalidade || 160) * ((newAluno.descontoFamiliaValor || 0) / 100))
         : newAluno.descontoFamiliaTipo === "fixo"
-          ? Math.max(0, newAluno.mensalidade - newAluno.descontoFamiliaValor)
-          : newAluno.mensalidade;
+          ? Math.max(0, (newAluno.mensalidade || 160) - (newAluno.descontoFamiliaValor || 0))
+          : (newAluno.mensalidade || 160);
 
       const newPayment: Pagamento = {
         id: `pay_${Date.now()}`,
         alunoId: newId,
         alunoNome: newAluno.nome,
         valor: discountVal,
+        desconto: (newAluno.mensalidade || 160) - discountVal,
+        valorFinal: discountVal,
+        referencia: new Date().toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" }),
         dataVencimento: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-        status: "Pendente"
+        vencimento: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+        status: newAluno.statusFinanceiro === "EM DIA" ? "Pago" : "Pendente"
       };
       
       await setDoc(doc(db, "mensalidades", newPayment.id), newPayment);
@@ -391,52 +818,228 @@ export default function App() {
     }
   };
 
-  // 2. DELETE Student (Admin action mapped to Firestore)
+  // 1.5. UPDATE Student Profile (Self profile update for regular students)
+  const handleUpdateCadastroProfile = async (dados: { 
+    nome: string; 
+    celular: string; 
+    endereco: string;
+    cpf?: string;
+    rg?: string;
+    dataNascimento?: string;
+    foto?: string;
+    responsavel?: string;
+  }) => {
+    if (!user || !userProfile) return;
+    try {
+      // 1. Opcionalmente atualiza também na coleção de usuários do Auth (users)
+      const userRef = doc(db, "users", user.uid);
+      await updateDoc(userRef, {
+        nome: dados.nome,
+        celular: dados.celular || "",
+        endereco: dados.endereco || "",
+        ...(dados.cpf ? { cpf: dados.cpf } : {}),
+        ...(dados.rg ? { rg: dados.rg } : {}),
+        ...(dados.dataNascimento ? { dataNascimento: dados.dataNascimento } : {}),
+        ...(dados.foto ? { foto: dados.foto } : {}),
+        ...(dados.responsavel ? { responsavel: dados.responsavel } : {})
+      });
+
+      // 2. Se o usuário atual possui alunoId, atualiza também a ficha do aluno (alunos)
+      const targetAlunoId = userProfile.alunoId || `stu_${user.uid}`;
+      const studentRef = doc(db, "alunos", targetAlunoId);
+
+      // Calcular a completude com os novos dados
+      const currentData = alunos.find(a => a.id === targetAlunoId);
+      
+      const updatedData = {
+        ...currentData,
+        nome: dados.nome,
+        celular: dados.celular || "",
+        telefone: dados.celular || "",
+        endereco: dados.endereco || "",
+        cpf: dados.cpf || currentData?.cpf || "",
+        rg: dados.rg || currentData?.rg || "",
+        dataNascimento: dados.dataNascimento || currentData?.dataNascimento || "2000-01-01",
+        foto: dados.foto || currentData?.foto || "",
+        responsavel: dados.responsavel || currentData?.responsavel || ""
+      };
+
+      const isMenor = (() => {
+        if (!updatedData.dataNascimento || updatedData.dataNascimento === "2000-01-01") return false;
+        try {
+          const nasc = new Date(updatedData.dataNascimento);
+          const idadeDifMs = Date.now() - nasc.getTime();
+          const idadeDate = new Date(idadeDifMs);
+          const idade = Math.abs(idadeDate.getUTCFullYear() - 1970);
+          return idade < 18;
+        } catch {
+          return false;
+        }
+      })();
+
+      let completude = 0;
+      if (updatedData.cpf && updatedData.cpf.trim() !== "" && updatedData.cpf !== "(Não cadastrado)") completude += 15;
+      if (updatedData.rg && updatedData.rg.trim() !== "") completude += 15;
+      if (updatedData.dataNascimento && updatedData.dataNascimento.trim() !== "" && updatedData.dataNascimento !== "2000-01-01") completude += 15;
+      const phone = updatedData.celular || updatedData.telefone;
+      if (phone && phone.trim() !== "" && phone !== "(Não cadastrado)") completude += 15;
+      if (updatedData.endereco && updatedData.endereco.trim() !== "") completude += 15;
+      if (updatedData.foto && updatedData.foto.trim() !== "") completude += 10;
+      
+      if (isMenor) {
+        if (updatedData.responsavel && updatedData.responsavel.trim() !== "") completude += 15;
+      } else {
+        completude += 15;
+      }
+
+      let novoStatus = currentData?.status || "PENDENTE";
+      if ((novoStatus === "PENDENTE" || novoStatus === "Inativo") && completude >= 100) {
+        novoStatus = "ATIVO";
+        alert("Parabéns! Ficha cadastral COMPLETADA com sucesso. Seu status foi promovido para ATIVO!");
+      }
+
+      // Procurar se documento existe antes de atualizar
+      const studentSnap = await getDoc(studentRef);
+      if (studentSnap.exists()) {
+        const isUserAdminOrInstructor = userProfile?.role === "ADMIN" || userProfile?.role === "INSTRUTOR" || user?.email === "deciopadovanijr@gmail.com";
+        if (isUserAdminOrInstructor) {
+          await updateDoc(studentRef, {
+            nome: dados.nome,
+            celular: dados.celular || "",
+            telefone: dados.celular || "",
+            endereco: dados.endereco || "",
+            cpf: dados.cpf || "",
+            rg: dados.rg || "",
+            dataNascimento: dados.dataNascimento || "2000-01-01",
+            foto: dados.foto || "",
+            responsavel: dados.responsavel || "",
+            status: novoStatus
+          });
+        } else {
+          // ALUNO: Só pode atualizar os campos cadastrais permitidos para evitar violação de regras e por segurança
+          await updateDoc(studentRef, {
+            celular: dados.celular || "",
+            telefone: dados.celular || "",
+            endereco: dados.endereco || "",
+            cpf: dados.cpf || "",
+            rg: dados.rg || "",
+            foto: dados.foto || "",
+            responsavel: dados.responsavel || ""
+          });
+        }
+      } else {
+        // Se o documento na coleção 'alunos' não existia, criamos agora de forma consistente
+        const todayString = new Date().toISOString().split("T")[0];
+        const newAluno: Aluno = {
+          id: targetAlunoId,
+          userId: user.uid,
+          nome: dados.nome,
+          email: user.email || "",
+          cpf: dados.cpf || "",
+          rg: dados.rg || "",
+          dataNascimento: dados.dataNascimento || "2000-01-01",
+          telefone: dados.celular || "",
+          whatsapp: dados.celular || "",
+          endereco: dados.endereco || "",
+          responsavel: dados.responsavel || "",
+          foto: dados.foto || "",
+          dataMatricula: todayString,
+          graduacaoAtual: "Preparatória - Branca",
+          dataUltimaGraduacao: todayString,
+          status: novoStatus,
+          turmaId: "turma_1",
+          modalidade: "Não definida",
+          observacoes: "Ficha criada via preenchimento de perfil.",
+          statusFinanceiro: "PENDENTE",
+          
+          graduacao: "Preparatória - Branca",
+          celular: dados.celular || "",
+          planoTipo: "2x_semana",
+          mensalidade: 160,
+          descontoFamiliaTipo: "nenhum",
+          descontoFamiliaValor: 0
+        };
+        await setDoc(studentRef, newAluno);
+        
+        // Linkar na conta de users também
+        await updateDoc(userRef, { alunoId: targetAlunoId });
+      }
+
+      alert("Cadastro atualizado com sucesso no Firestore!");
+    } catch (e: any) {
+      console.error("Erro ao atualizar cadastro:", e);
+      alert("Falha ao atualizar dados de cadastro: " + e.message);
+    }
+  };
+
+  // 2. DELETE Student (Admin action mapped to logical INATIVO status in Firestore)
   const handleDeleteAluno = async (id: string) => {
     try {
-      // 1. Deletar todas as mensalidades associadas para manter a integridade
-      const studentMensalidades = pagamentos.filter((p) => p.alunoId === id);
-      for (const inv of studentMensalidades) {
-        await deleteDoc(doc(db, "mensalidades", inv.id));
-      }
+      // Alterar status para INATIVO no documento do aluno no Firestore
+      await updateDoc(doc(db, "alunos", id), {
+        status: "INATIVO"
+      });
 
-      // 2. Deletar todos os registros de presença deste aluno
-      const studentPresencas = presencas.filter((p) => p.alunoId === id);
-      for (const pres of studentPresencas) {
-        await deleteDoc(doc(db, "presencas", pres.id));
-      }
-
-      // 3. Desvincular o campo alunoId dos documentos correspondentes na coleção "users"
+      alert("Ficha do aluno inativada com sucesso! Todo o histórico de cobranças, presenças, exames e graduações foi preservado intacto.");
+    } catch (err: any) {
+      console.error("handleDeleteAluno (inativação lógica) failed:", err);
       try {
-        const usersRef = collection(db, "users");
-        const querySnapshot = await getDocs(usersRef);
-        for (const docSnap of querySnapshot.docs) {
-          const userData = docSnap.data();
-          if (userData.alunoId === id) {
-            await updateDoc(doc(db, "users", docSnap.id), {
-              alunoId: null
-            });
-          }
-        }
-      } catch (errUser) {
-        console.warn("Aviso: Falha ao desvincular o aluno de /users:", errUser);
-      }
-
-      // 4. Deletar o documento do aluno no Firestore
-      await deleteDoc(doc(db, "alunos", id));
-
-      alert("Aluno, cobranças (mensalidades) e registros de presença associados foram excluídos com sucesso!");
-    } catch (err) {
-      console.error("handleDeleteAluno failed:", err);
-      try {
-        handleFirestoreError(err, OperationType.DELETE, `alunos/${id}`);
+        handleFirestoreError(err, OperationType.UPDATE, `alunos/${id}`);
       } catch (e: any) {
-        alert("Erro ao excluir aluno do Firestore: " + e.message);
+        alert("Erro ao inativar aluno do Firestore: " + e.message);
       }
     }
   };
 
   const handleExcluirAluno = handleDeleteAluno;
+
+  // 2.7. CRUD INTEGRADO PARA INSTRUTORES REAIS (FASE 4 - PARTE 1)
+  const handleSaveInstrutor = async (instData: Omit<Instrutor, "id"> & { id?: string }) => {
+    try {
+      const id = instData.id || `inst_${Date.now()}`;
+      const finalInst: Instrutor = {
+        ...instData,
+        id,
+        ativo: instData.ativo !== undefined ? instData.ativo : true
+      };
+      await setDoc(doc(db, "instrutores", id), finalInst);
+    } catch (err: any) {
+      console.error("handleSaveInstrutor failed:", err);
+      alert("Erro ao gravar instrutor: " + err.message);
+    }
+  };
+
+  const handleDeleteInstrutor = async (id: string) => {
+    if (!confirm("Tem certeza que deseja remover este instrutor?")) return;
+    try {
+      // Desvincular de turmas ativas primeiro
+      const classesToUpdate = turmas.filter(t => t.instrutorId === id);
+      for (const t of classesToUpdate) {
+        await updateDoc(doc(db, "turmas", t.id), {
+          instrutorId: "",
+          instrutorNome: ""
+        });
+      }
+      await deleteDoc(doc(db, "instrutores", id));
+      alert("Instrutor e seus vínculos em turmas foram removidos com sucesso!");
+    } catch (err: any) {
+      console.error("handleDeleteInstrutor failed:", err);
+      alert("Erro ao remover instrutor: " + err.message);
+    }
+  };
+
+  const handleUpdateTurmaInstrutor = async (turmaId: string, instrutorId: string, instrutorNome: string) => {
+    try {
+      await updateDoc(doc(db, "turmas", turmaId), {
+        instrutorId,
+        instrutorNome
+      });
+      alert("Vínculo de instrutor da turma atualizado com sucesso!");
+    } catch (err: any) {
+      console.error("handleUpdateTurmaInstrutor failed:", err);
+      alert("Erro ao vincular instrutor à turma: " + err.message);
+    }
+  };
 
   // 2.5. SYNCHRONIZE Users as Alunos (Promoting all authenticated student logins to academic roster)
   const handleSyncUsersAsAlunosDirect = async () => {
@@ -450,65 +1053,158 @@ export default function App() {
         allUsers.push({ id: docSnap.id, ...docSnap.data() });
       });
 
+      // CARREGAR ALUNOS DO FIRESTORE EM TEMPO REAL PARA PROTEÇÃO EXTRA CONTRA DUPLICADOS E INATIVADOS
+      const dbAlunosSnap = await getDocs(collection(db, "alunos"));
+      const dbAlunosList = dbAlunosSnap.docs.map(d => ({ id: d.id, ...d.data() } as Aluno));
+
       let addedCount = 0;
+      const todayString = new Date().toISOString().split("T")[0];
+      const nextMonthString = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      const currentRef = new Date().toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" });
 
       for (const u of allUsers) {
-        // Check if user is already an Aluno (by matching ID or email)
-        const isAlreadyAluno = alunos.some(
-          (a) => (a.email && a.email.toLowerCase() === u.email?.toLowerCase()) || a.id === `stu_${u.id}`
-        ) || !!u.alunoId;
-        
-        const isAdmin = u.role === "ADMIN" || u.email?.toLowerCase() === "deciopadovanijr@gmail.com";
+        // Exclude admin role or principal administrator Decio
+        const isAdmin = (u?.role || "").toUpperCase() === "ADMIN" || (u?.email || "").toLowerCase() === "deciopadovanijr@gmail.com";
+        if (isAdmin) continue;
 
-        if (!isAlreadyAluno && !isAdmin) {
+        // Check if user is already an Aluno (even if logical/inactivated, checking real DB list)
+        const isAlreadyAluno = dbAlunosList.some(
+          (a) => a?.userId === u?.id || (a?.email && (a.email || "").toLowerCase() === (u?.email || "").toLowerCase()) || a?.id === `stu_${u?.id}`
+        ) || !!u?.alunoId;
+
+        if (!isAlreadyAluno) {
           const studentId = `stu_${u.id}`;
-          const newAluno = {
+          const defaultTurmaId = turmas.length > 0 ? turmas[0].id : "turma_1";
+
+          const newAluno: Aluno = {
             id: studentId,
+            userId: u.id,
             nome: u.nome || u.email?.split("@")[0] || "Aluno Sincronizado",
             email: u.email || "",
-            telefone: u.telefone || "(13) 99999-9999",
-            cpf: u.cpf || "---.---.------",
+            cpf: u.cpf || "",
+            rg: u.rg || "",
             dataNascimento: u.dataNascimento || "2000-01-01",
-            whatsapp: u.whatsapp || "",
-            endereco: u.endereco || "Endereço por Cadastrar",
-            graduacao: "Branca",
-            mensalidade: 120,
-            statusFinanceiro: "Em Dia",
+            telefone: u.telefone || u.celular || "",
+            whatsapp: u.whatsapp || u.celular || "",
+            endereco: u.endereco || "",
+            responsavel: u.responsavel || "",
+            foto: u.foto || "",
+            dataMatricula: todayString,
+            graduacaoAtual: "Preparatória - Branca",
+            dataUltimaGraduacao: todayString,
+            status: "PENDENTE", // Sincronizados iniciam como PENDENTE para auditoria operacional
+            turmaId: u.turmaId || defaultTurmaId,
+            modalidade: "Não definida", // Inicialmente não definida
+            observacoes: "Usuário sincronizado do sistema de autenticação como PENDENTE.",
+            statusFinanceiro: "PENDENTE",
+            
+            // Compatibility fields
+            graduacao: "Preparatória - Branca",
+            celular: u.telefone || u.celular || "",
+            planoTipo: "2x_semana",
+            mensalidade: 160,
             descontoFamiliaTipo: "nenhum",
-            descontoFamiliaValor: 0,
-            dataMatricula: new Date().toISOString().split("T")[0]
+            descontoFamiliaValor: 0
           };
 
-          // Create Aluno record
+          // 1. Create Aluno record
           await setDoc(doc(db, "alunos", studentId), newAluno);
 
-          // Update user link
+          // 2. Link userId to student (Update user document)
           await updateDoc(doc(db, "users", u.id), {
             alunoId: studentId
           });
 
-          // Create initial payment record
+          // 3. Create initial payment record (First monthly fee)
           const paymentId = `pay_${Date.now()}_${u.id.substring(0, 4)}`;
-          const newPayment = {
+          const newPayment: Pagamento = {
             id: paymentId,
             alunoId: studentId,
             alunoNome: newAluno.nome,
-            valor: 120,
-            dataVencimento: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+            valor: 160,
+            desconto: 0,
+            valorFinal: 160,
+            referencia: currentRef,
+            dataVencimento: nextMonthString,
+            vencimento: nextMonthString,
             status: "Pendente"
           };
+
           await setDoc(doc(db, "mensalidades", paymentId), newPayment);
 
           addedCount++;
         }
       }
 
-      alert(`Sincronização concluída! ${addedCount} novos usuários cadastrados como alunos.`);
+      alert(`Sincronização blindada concluída! ${addedCount} novos usuários foram matriculados como alunos pendentes.`);
     } catch (err: any) {
       console.error("Sincronização de usuários falhou:", err);
       alert("Erro ao sincronizar usuários: " + err.message);
     } finally {
       setIsSyncingUsers(false);
+    }
+  };
+
+  // 2.7. Registrar / Editar Exame de Faixa (Persistência real na coleção exames do Firestore)
+  const handleSaveExame = async (exameDataObj: Omit<Exame, "id" | "alunoId" | "alunoNome"> & { modalidade?: string }, aluno: Aluno) => {
+    try {
+      const newExId = "ex_" + Date.now();
+      const chosenMod = exameDataObj.modalidade || exameModalidade || "Kung Fu";
+      const novoExame: Exame & { modalidade?: string } = {
+        id: newExId,
+        alunoId: aluno.id,
+        alunoNome: aluno.nome,
+        modalidade: chosenMod,
+        ...exameDataObj
+      };
+      
+      // Persiste na coleção "exames"
+      await setDoc(doc(db, "exames", newExId), novoExame);
+      
+      // Se aprovado, atualiza também a faixa graduação atual do aluno na coleção "alunos" E "aluno_modalidades"
+      if (exameDataObj.resultado === "Aprovado" || exameDataObj.resultado === "APROVADO") {
+        // Encontra os detalhes oficiais da graduação promovida
+        const gradeDetails = getSubModalityGradeAndFaixa(chosenMod, exameDataObj.graduacaoPretendida);
+
+        // Atualiza a coleção aluno_modalidades
+        const alModId = `am_${aluno.id}_${chosenMod.replace(/\s+/g, "")}`;
+        await setDoc(doc(db, "aluno_modalidades", alModId), {
+          id: alModId,
+          alunoId: aluno.id,
+          modalidade: chosenMod,
+          graduacaoAtual: gradeDetails.graduacao,
+          faixaAtual: gradeDetails.faixa,
+          ordemGraduacao: gradeDetails.ordem,
+          dataUltimaGraduacao: exameDataObj.dataExame,
+          ativo: true
+        });
+
+        // Também atualiza o documento do aluno principal (para compatibilidade retrô sem quebrar telas existentes)
+        await updateDoc(doc(db, "alunos", aluno.id), {
+          graduacao: `${gradeDetails.graduacao} - ${gradeDetails.faixa}`,
+          graduacaoAtual: `${gradeDetails.graduacao} - ${gradeDetails.faixa}`,
+          dataUltimaGraduacao: exameDataObj.dataExame
+        });
+
+        // E cria registro em graduacoes para compor histórico reativo de sashes
+        const newGradId = "grad_" + Date.now();
+        await setDoc(doc(db, "graduacoes", newGradId), {
+          id: newGradId,
+          alunoId: aluno.id,
+          alunoNome: aluno.nome,
+          modalidade: chosenMod,
+          graduacaoAnterior: aluno.graduacao || "Preparatória - Branca",
+          graduacaoNova: `${gradeDetails.graduacao} - ${gradeDetails.faixa}`,
+          dataGraduacao: exameDataObj.dataExame,
+          avaliador: exameDataObj.avaliador,
+          resultado: "Aprovado"
+        });
+      }
+      
+      alert(`Exame de faixa gravado com sucesso no Firestore para ${aluno.nome}!`);
+    } catch (e: any) {
+      console.error("Falha ao registrar exame de faixa no Firestore:", e);
+      alert("Erro ao registrar exame: " + e.message);
     }
   };
 
@@ -563,7 +1259,7 @@ export default function App() {
 
       const normalizedStatus = status === "A provado" ? "Aprovado" : status;
 
-      await updateDoc(doc(db, "exames", gradId), {
+      await updateDoc(doc(db, "graduacoes", gradId), {
         notaTecnica: notaTec,
         notaFilosofica: notaPhil,
         status: normalizedStatus
@@ -572,15 +1268,16 @@ export default function App() {
       if (normalizedStatus === "Aprovado") {
         await updateDoc(doc(db, "alunos", targetGrad.alunoId), {
           graduacao: targetGrad.sashNovo,
+          graduacaoAtual: targetGrad.sashNovo,
           dataUltimaGraduacao: new Date().toISOString().split("T")[0]
         });
       }
     } catch (err) {
       console.error("handleUpdateGraduacao failed:", err);
       try {
-        handleFirestoreError(err, OperationType.UPDATE, `exames/${gradId}`);
+        handleFirestoreError(err, OperationType.UPDATE, `graduacoes/${gradId}`);
       } catch (e: any) {
-        alert("Erro ao atualizar exame no Firestore: " + e.message);
+        alert("Erro ao atualizar graduação no Firestore: " + e.message);
       }
     }
   };
@@ -599,6 +1296,127 @@ export default function App() {
     }
   };
 
+  // --- MÓDULOS OPERACIONAIS (FASE 4) COMPLETOS ---
+  const handleSaveMensalidade = async (m: Pagamento) => {
+    try {
+      const id = m.id || `mensalidade_${Date.now()}`;
+      const finalM = { 
+        ...m, 
+        id,
+        referencia: m.competencia || m.referencia || "01/2026"
+      };
+      await setDoc(doc(db, "mensalidades", id), finalM);
+    } catch (err: any) {
+      console.error("handleSaveMensalidade failed:", err);
+      alert("Erro ao salvar mensalidade: " + err.message);
+    }
+  };
+
+  const handleDeleteMensalidade = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "mensalidades", id));
+    } catch (err: any) {
+      console.error("handleDeleteMensalidade failed:", err);
+      alert("Erro ao excluir mensalidade: " + err.message);
+    }
+  };
+
+  const handleGenerateMensalidadesLote = async (competencia: string, vencimento: string, valorPadrao: number) => {
+    try {
+      const alunosAtivos = alunos.filter(a => {
+        const s = (a.status || "").toUpperCase().trim();
+        return s === "ATIVO" || s === "" || a.status === "Ativo";
+      });
+
+      if (alunosAtivos.length === 0) {
+        alert("Nenhum aluno ativo encontrado para gerar mensalidades.");
+        return;
+      }
+
+      let count = 0;
+      for (const al of alunosAtivos) {
+        const exists = pagamentos.some(p => p.alunoId === al.id && (p.competencia === competencia || p.referencia === competencia));
+        if (exists) continue;
+
+        const id = `mensalidade_bulk_${al.id}_${Date.now()}_${count}`;
+        const val = al.mensalidade !== undefined ? al.mensalidade : valorPadrao;
+        const newM: Pagamento = {
+          id,
+          alunoId: al.id,
+          alunoNome: al.nome,
+          referencia: competencia,
+          competencia: competencia,
+          vencimento: vencimento,
+          valor: val,
+          valorFinal: val,
+          status: "PENDENTE",
+          observacoes: "Gerada em lote."
+        };
+        await setDoc(doc(db, "mensalidades", id), newM);
+        count++;
+      }
+      alert(`${count} mensalidades foram geradas com sucesso para a competência ${competencia}!`);
+    } catch (err: any) {
+      console.error("handleGenerateMensalidadesLote failed:", err);
+      alert("Erro ao gerar mensalidades em lote: " + err.message);
+    }
+  };
+
+  const handleSaveProduto = async (p: Produto) => {
+    try {
+      const id = p.id || `produto_${Date.now()}`;
+      const finalP = { ...p, id, valor: p.valorVenda };
+      await setDoc(doc(db, "produtos", id), finalP);
+    } catch (err: any) {
+      console.error("handleSaveProduto failed:", err);
+      alert("Erro ao salvar produto: " + err.message);
+    }
+  };
+
+  const handleDeleteProduto = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "produtos", id));
+    } catch (err: any) {
+      console.error("handleDeleteProduto failed:", err);
+      alert("Erro ao excluir produto: " + err.message);
+    }
+  };
+
+  const handleSaveVenda = async (v: Venda) => {
+    try {
+      const id = v.id || `venda_${Date.now()}`;
+      await setDoc(doc(db, "vendas", id), v);
+
+      const pr = produtos.find(p => p.id === v.produtoId);
+      if (pr) {
+        const newEstoque = Math.max(0, pr.estoque - v.quantidade);
+        await updateDoc(doc(db, "produtos", v.produtoId), { estoque: newEstoque });
+      }
+    } catch (err: any) {
+      console.error("handleSaveVenda failed:", err);
+      alert("Erro ao registrar venda: " + err.message);
+    }
+  };
+
+  const handleSaveFamilia = async (f: Familia) => {
+    try {
+      const id = f.id || `familia_${Date.now()}`;
+      await setDoc(doc(db, "familias", id), { ...f, id });
+    } catch (err: any) {
+      console.error("handleSaveFamilia failed:", err);
+      alert("Erro ao salvar família: " + err.message);
+    }
+  };
+
+  const handleDeleteFamilia = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "familias", id));
+    } catch (err: any) {
+      console.error("handleDeleteFamilia failed:", err);
+      alert("Erro ao remover família: " + err.message);
+    }
+  };
+
   // 7. STUDENT PRESENCE REQUEST VIA APP (Requirement 3 mapped to Firestore)
   const handleSolicitarPresenca = async (turmaId: string, data: string) => {
     try {
@@ -611,6 +1429,13 @@ export default function App() {
         return;
       }
 
+      const isInactive = (activeStudent.status || "").toUpperCase().trim() === "INATIVO";
+      if (isInactive) {
+        alert("Acesso suspenso: Alunos inativos não podem solicitar presença ou realizar novos check-ins.");
+        return;
+      }
+
+      const targetTurma = turmas.find(t => t.id === turmaId);
       const newPresenca: Presenca = {
         id: `pres_req_${Date.now()}`,
         turmaId,
@@ -618,7 +1443,10 @@ export default function App() {
         alunoNome: activeStudent.nome,
         data,
         status: "PENDING",
-        solicitadoPorAluno: true
+        solicitadoPorAluno: true,
+        modalidade: targetTurma?.nomeEstilo || "Kung Fu",
+        horario: targetTurma?.horario || "15:00 - 16:00",
+        confirmadoPor: ""
       };
 
       await setDoc(doc(db, "presencas", newPresenca.id), newPresenca);
@@ -662,7 +1490,7 @@ export default function App() {
           await setDoc(doc(db, "presencas", item.id), item);
         }
         for (const item of INITIAL_GRADUACOES) {
-          await setDoc(doc(db, "exames", item.id), item);
+          await setDoc(doc(db, "graduacoes", item.id), item);
         }
         for (const item of INITIAL_PAGAMENTOS) {
           await setDoc(doc(db, "mensalidades", item.id), item);
@@ -934,15 +1762,31 @@ export default function App() {
   }
 
   // Active student calculation based on authenticated account linkage and lists
-  const defaultStudent = userProfile.role === "ALUNO" && userProfile.alunoId
-    ? (alunos.find(a => a.id === userProfile.alunoId) || {
-        id: userProfile.alunoId,
-        nome: userProfile.nome,
-        email: userProfile.email,
+  let defaultStudent: Aluno | undefined = undefined;
+  if (userProfile && userProfile.role === "ALUNO") {
+    // 1. Tentar encontrar pelo alunoId vinculado no perfil
+    if (userProfile.alunoId) {
+      defaultStudent = alunos.find(a => a.id === userProfile.alunoId);
+    }
+    // 2. Se não encontrou, tentar encontrar pelo email (case-insensitive) do usuário logado
+    if (!defaultStudent && userProfile.email) {
+      const emailLower = userProfile.email.trim().toLowerCase();
+      defaultStudent = alunos.find(a => a.email && a.email.trim().toLowerCase() === emailLower);
+    }
+    // 3. Se ainda não encontrou mas temos algum aluno na lista restrita dele do onSnapshot (que já aplica o filtro)
+    if (!defaultStudent && alunos.length > 0) {
+      defaultStudent = alunos[0];
+    }
+    // 4. Fallback final: Objeto mockado do aluno
+    if (!defaultStudent) {
+      defaultStudent = {
+        id: userProfile.alunoId || `stu_${userProfile.uid}`,
+        nome: userProfile.nome || "Membro",
+        email: userProfile.email || "",
         celular: "(Não cadastrado)",
         cpf: "(Não cadastrado)",
         dataNascimento: "",
-        graduacao: GraduacaoSash.BRANCA,
+        graduacao: "Preparatória - Branca",
         dataUltimaGraduacao: "",
         status: "Ativo" as const,
         turmaId: "turma_1",
@@ -952,8 +1796,12 @@ export default function App() {
         descontoFamiliaValor: 0,
         statusFinanceiro: "Em Dia" as const,
         observacoes: "Aluno sincronizado."
-      } as Aluno)
-    : (alunos.find(a => a.id === "stu_1") || alunos[0]);
+      } as Aluno;
+    }
+  } else {
+    // Se for Admin/Instrutor, mostramos um aluno de mockup para visualizações se existirem alunos
+    defaultStudent = alunos.find(a => a.id === "stu_1") || alunos[0];
+  }
 
   const defaultStudentTurma = defaultStudent ? turmas.find(t => t.id === defaultStudent.turmaId) : undefined;
 
@@ -971,6 +1819,11 @@ export default function App() {
   const handleStudentCheckin = () => {
     if (!defaultStudent) {
       setStudentStatusMsg("Você precisa ter uma matrícula de aluno ativa!");
+      return;
+    }
+    const isInactive = (defaultStudent.status || "").toUpperCase().trim() === "INATIVO";
+    if (isInactive) {
+      setStudentStatusMsg("❌ Acesso suspenso: Alunos inativos não podem solicitar presença ou realizar novos check-ins.");
       return;
     }
     const exists = presencas.some(p => p.alunoId === defaultStudent.id && p.data === selectedCheckinDate);
@@ -1231,8 +2084,22 @@ export default function App() {
 
       {/* Admin general recognized email banner */}
       {isAdmin && activeBottomTab === "inicio" && (
-        <div className="bg-red-950/25 border-b border-red-900/40 py-2 px-4 text-left text-[10px] font-mono text-amber-500 leading-tight">
-          ⭐ Professor Administrador (<strong className="text-white">deciopadovanijr@gmail.com</strong>) com acesso administrativo total às coleções.
+        <div className="bg-red-950/25 border-b border-red-900/40 py-2 px-4 text-left text-[10px] font-mono text-amber-500 leading-tight flex flex-wrap items-center justify-between gap-2.5">
+          <div>
+            ⭐ Professor Administrador (<strong className="text-white">deciopadovanijr@gmail.com</strong>) com acesso administrativo total às coleções.
+            {migrationStatus && (
+              <span className="ml-2 px-1.5 py-0.5 rounded bg-zinc-900 text-amber-300 font-bold border border-zinc-800 animate-fadeIn">
+                {migrationStatus}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={handleManualLegacyMigration}
+            disabled={migrating}
+            className="px-2.5 py-1 text-[9px] uppercase font-bold tracking-wider rounded border border-amber-900 bg-amber-950/30 text-amber-400 hover:bg-amber-500 hover:text-black transition-all cursor-pointer disabled:opacity-50 shrink-0"
+          >
+            {migrating ? "Migrando..." : "Executar Migração de Modalidades Legadas"}
+          </button>
         </div>
       )}
 
@@ -1301,6 +2168,11 @@ export default function App() {
                 setActiveBottomTab={setActiveBottomTab}
                 handleStudentCheckin={handleStudentCheckin}
                 studentStatusMsg={studentStatusMsg}
+                graduacoes={graduacoes}
+                exames={exames}
+                produtos={produtos}
+                vendas={vendas}
+                familias={familias}
               />
             </div>
           )}
@@ -1349,6 +2221,40 @@ export default function App() {
                 <Search className="w-4 h-4 text-zinc-600 absolute right-3.5 top-1/2 -translate-y-1/2" />
               </div>
 
+              {/* Filtros de Aluno por Status operacional */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                {(["ATIVOS", "INATIVOS", "PENDENTES", "TODOS"] as const).map((fs) => {
+                  const isSel = filterStatus === fs;
+                  // Contagem inteligente correspondente
+                  const count = alunos.filter((a) => {
+                    const norm = (a.status || "").toUpperCase().trim();
+                    if (fs === "ATIVOS") return norm === "ATIVO" || norm === "" || !a.status;
+                    if (fs === "INATIVOS") return norm === "INATIVO";
+                    if (fs === "PENDENTES") return norm === "PENDENTE";
+                    return true;
+                  }).filter(a => (a?.nome || "").toLowerCase().includes((searchTerm || "").toLowerCase())).length;
+
+                  return (
+                    <button
+                      key={fs}
+                      onClick={() => setFilterStatus(fs)}
+                      className={`px-3 py-1.5 rounded-xl border text-[10px] font-mono font-bold transition-all duration-150 flex items-center gap-1.5 cursor-pointer ${
+                        isSel
+                          ? "bg-red-950/40 text-red-500 border-red-900 shadow-sm animate-fadeIn"
+                          : "bg-zinc-950 text-zinc-500 border-zinc-900/60 hover:text-zinc-400"
+                      }`}
+                    >
+                      <span>{fs}</span>
+                      <span className={`px-1.5 py-0.2 rounded-md text-[8.5px] font-sans ${
+                        isSel ? "bg-red-900/60 text-red-300" : "bg-zinc-900 text-zinc-650"
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
               {/* Add Aluno inline modal form */}
               {showAddForm && activeRole === "ADMIN" && (
                 <div className="bg-[#141414] border border-zinc-900 p-4.5 rounded-2xl text-left space-y-4 animate-fadeIn">
@@ -1358,10 +2264,30 @@ export default function App() {
                   <AdminPanel
                     alunos={alunos}
                     turmas={turmas}
+                    instrutores={instrutores}
                     pagamentos={pagamentos}
                     config={config}
+                    produtos={produtos}
+                    vendas={vendas}
+                    familias={familias}
+                    presencas={presencas}
+                    onSaveProduto={handleSaveProduto}
+                    onDeleteProduto={handleDeleteProduto}
+                    onSaveVenda={handleSaveVenda}
+                    onSaveFamilia={handleSaveFamilia}
+                    onDeleteFamilia={handleDeleteFamilia}
+                    onSaveMensalidade={handleSaveMensalidade}
+                    onDeleteMensalidade={handleDeleteMensalidade}
+                    onGenerateMensalidadesLote={handleGenerateMensalidadesLote}
+                    activeRole={activeRole}
+                    initialEditAluno={editingAlunoForForm || undefined}
+                    onCancelEdit={() => {
+                      setEditingAlunoForForm(null);
+                      setShowAddForm(false);
+                    }}
                     onAddAluno={(newStu) => {
                       handleAddAluno(newStu);
+                      setEditingAlunoForForm(null);
                       setShowAddForm(false);
                     }}
                     onDeleteAluno={handleDeleteAluno}
@@ -1371,67 +2297,359 @@ export default function App() {
                 </div>
               )}
 
-              {/* Student list elements */}
-              <div className="space-y-2.5">
-                {alunos.filter(a => a.nome.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 ? (
-                  <p className="text-center text-xs text-zinc-550 py-8">Nenhum aluno encontrado na lista da academia.</p>
+              {/* Student list elements em Grade Bento Premium */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4" id="students-bento-grid">
+                {alunos
+                  .filter(a => (a?.nome || "").toLowerCase().includes((searchTerm || "").toLowerCase()))
+                  .filter(a => {
+                    const norm = (a.status || "").toUpperCase().trim();
+                    if (filterStatus === "ATIVOS") return norm === "ATIVO" || norm === "" || !a.status;
+                    if (filterStatus === "INATIVOS") return norm === "INATIVO";
+                    if (filterStatus === "PENDENTES") return norm === "PENDENTE";
+                    return true;
+                  }).length === 0 ? (
+                  <p className="col-span-full text-center text-xs text-zinc-550 py-8 font-mono">Nenhum aluno encontrado com esses filtros.</p>
                 ) : (
                   alunos
-                    .filter(a => a.nome.toLowerCase().includes(searchTerm.toLowerCase()))
+                    .filter(a => (a?.nome || "").toLowerCase().includes((searchTerm || "").toLowerCase()))
+                    .filter(a => {
+                      const norm = (a.status || "").toUpperCase().trim();
+                      if (filterStatus === "ATIVOS") return norm === "ATIVO" || norm === "" || !a.status;
+                      if (filterStatus === "INATIVOS") return norm === "INATIVO";
+                      if (filterStatus === "PENDENTES") return norm === "PENDENTE";
+                      return true;
+                    })
                     .map(a => (
                       <div 
                         key={a.id}
-                        className="bg-zinc-950 border border-zinc-900 rounded-2xl p-4 text-left flex items-center justify-between gap-4"
+                        className="bg-zinc-950 border border-zinc-900 rounded-3xl p-5 text-left flex flex-col justify-between gap-4 hover:border-zinc-800 transition-all shadow-md group relative overflow-hidden"
                       >
-                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-xs font-black text-amber-500 uppercase">
+                        {/* Indicador visual de faixa na rebarba lateral esquerda do cartão para luxo extra! */}
+                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${
+                          (a.graduacao || "").toLowerCase().includes("preta") ? "bg-black" :
+                          (a.graduacao || "").toLowerCase().includes("vermelha") ? "bg-red-600" :
+                          (a.graduacao || "").toLowerCase().includes("amarela") ? "bg-yellow-500" :
+                          (a.graduacao || "").toLowerCase().includes("azul") ? "bg-blue-600" :
+                          (a.graduacao || "").toLowerCase().includes("verde") ? "bg-emerald-600" :
+                          (a.graduacao || "").toLowerCase().includes("marrom") ? "bg-amber-800" : "bg-zinc-400"
+                        }`} />
+
+                        <div className="flex items-start gap-3.5">
+                          {/* Avatar inteligente com cores baseadas na faixa */}
+                          <div className={`w-11 h-11 rounded-2xl flex items-center justify-center text-xs font-black uppercase text-white shadow-inner bg-gradient-to-br from-zinc-900 to-black border-2 shrink-0 ${
+                            (a.graduacao || "").toLowerCase().includes("preta") ? "border-red-650 text-amber-500" :
+                            (a.graduacao || "").toLowerCase().includes("vermelha") ? "border-red-650 text-red-500" :
+                            (a.graduacao || "").toLowerCase().includes("amarela") ? "border-yellow-500 text-yellow-400" :
+                            (a.graduacao || "").toLowerCase().includes("azul") ? "border-blue-500 text-blue-400" :
+                            (a.graduacao || "").toLowerCase().includes("verde") ? "border-emerald-500 text-emerald-400" :
+                            (a.graduacao || "").toLowerCase().includes("marrom") ? "border-amber-750 text-amber-600" : "border-zinc-700 text-zinc-300"
+                          }`}>
                             {a.nome?.substring(0, 2)}
                           </div>
-                          <div className="leading-tight text-left space-y-1">
-                            <h4 className="text-xs font-bold text-white uppercase">{a.nome}</h4>
-                            <p className="text-[10px] font-mono text-zinc-500">
-                              CPF: {a.cpf || "não registrado"} • Cel: {a.celular || "não registrado"}
-                            </p>
-                            {a.endereco && (
-                              <p className="text-[10px] text-zinc-400 flex items-center gap-1 font-sans">
-                                📍 {a.endereco}
-                              </p>
-                            )}
-                            <div className="pt-0.5">
-                              <span className="inline-flex py-0.5 px-2 rounded-full bg-neutral-900 text-[8px] font-bold text-amber-400">
-                                {a.graduacao ? a.graduacao : "Branca"}
+
+                          <div className="leading-tight text-left space-y-1.5 flex-1 min-w-0">
+                            <h4 className="text-[12.5px] font-extrabold text-white uppercase tracking-wide group-hover:text-amber-500 transition-colors leading-snug truncate">{a.nome}</h4>
+                            <div className="flex flex-wrap gap-1">
+                              <span className="inline-flex py-0.5 px-2 rounded-md bg-zinc-900 text-[8.5px] font-bold text-amber-400 border border-zinc-800 font-mono">
+                                🥋 {a.graduacao ? a.graduacao : "BRANCA"}
+                              </span>
+                              <span className={`inline-flex px-2 py-0.5 rounded-md text-[8.5px] uppercase font-bold leading-none border font-mono ${
+                                a.statusFinanceiro === "Em Dia" ? "bg-emerald-[#1c2e22]/50 text-emerald-400 border-emerald-900/40" :
+                                a.statusFinanceiro === "Atrasado" ? "bg-red-[#331818]/50 text-red-500 border-red-900/40" : "bg-zinc-900 text-zinc-400 border-zinc-805"
+                              }`}>
+                                {a.statusFinanceiro}
                               </span>
                             </div>
                           </div>
                         </div>
 
-                        {/* Status indicators */}
-                        <div className="text-right space-y-1">
-                          <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] uppercase font-black font-mono leading-none ${
-                            a.statusFinanceiro === "Em Dia" ? "bg-emerald-950/40 text-emerald-400 border border-emerald-950/60" :
-                            a.statusFinanceiro === "Atrasado" ? "bg-red-950/40 text-red-500 border border-red-950/60" : "bg-zinc-900 text-zinc-400 border border-zinc-855"
-                          }`}>
-                            {a.statusFinanceiro}
-                          </span>
-                          {activeRole === "ADMIN" && (
-                            <div className="flex gap-1.5 justify-end">
-                              <button
-                                onClick={() => {
-                                  if (confirm(`Tem certeza de que deseja EXCLUIR permanentemente o aluno ${a.nome} e todo o seu histórico financeiro do sistema?`)) {
-                                    handleDeleteAluno(a.id);
-                                  }
-                                }}
-                                className="text-red-500 hover:text-red-400 text-[10px] font-mono uppercase bg-red-950/20 p-1.5 rounded-lg border border-red-950"
-                              >
-                                Excluir
-                              </button>
-                            </div>
+                        {/* Dados adicionais com rótulo minimalista */}
+                        <div className="space-y-1 text-[11px] font-sans text-zinc-400 border-t border-zinc-900/60 pt-3">
+                          <div className="font-mono text-zinc-550 text-[10px] flex flex-col sm:flex-row sm:justify-between gap-1">
+                            <span>CPF: <strong className="text-zinc-400">{a.cpf || "-"}</strong></span>
+                            <span>Celular: <strong className="text-zinc-400">{a.celular || "-"}</strong></span>
+                          </div>
+                          {a.endereco && (
+                            <p className="text-zinc-400 flex items-center gap-1.5 leading-snug mt-1 text-[10px]">
+                              <span className="text-zinc-555 shrink-0">📍</span>
+                              <span className="truncate">{a.endereco}</span>
+                            </p>
                           )}
                         </div>
+
+                        {/* Ações do Dashboard com total responsividade */}
+                        {activeRole !== "ALUNO" && (
+                          <div className="flex flex-wrap gap-1 mt-1 border-t border-zinc-900/60 pt-3">
+                            <button
+                              onClick={() => setSelectedFichaAluno(a)}
+                              className="flex-1 min-w-[55px] text-zinc-350 hover:text-white hover:bg-zinc-900 duration-150 p-2 text-[10px] font-black uppercase bg-zinc-900 rounded-xl border border-zinc-850 cursor-pointer text-center"
+                            >
+                              Ficha
+                            </button>
+                            <button
+                              onClick={() => {
+                                setAlunoSelecionadoExame(a);
+                                setExameGradPretendida(a.graduacao || "Preparatória - Branca");
+                                setExameData(new Date().toISOString().split("T")[0]);
+                                setExameNotaTec(8);
+                                setExameNotaTeor(8);
+                                setExameAvaliador("Professor Décio");
+                                setExameStatus("Aprovado");
+                                setExameObs("");
+                              }}
+                              className="flex-1 min-w-[55px] text-amber-500 hover:text-amber-400 hover:bg-amber-950/40 duration-150 p-2 text-[10px] font-black uppercase bg-amber-950/20 rounded-xl border border-amber-900/30 cursor-pointer text-center"
+                            >
+                              Exame
+                            </button>
+                            {activeRole === "ADMIN" && (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    setEditingAlunoForForm(a);
+                                    setShowAddForm(true);
+                                    // Rolar suavemente até o formulário
+                                    setTimeout(() => {
+                                      const formElement = document.getElementById("btn-sync-users-as-alunos") || document.getElementById("form-add-aluno");
+                                      if (formElement) {
+                                        formElement.scrollIntoView({ behavior: "smooth" });
+                                      }
+                                    }, 100);
+                                  }}
+                                  className="flex-1 min-w-[55px] text-blue-500 hover:text-blue-400 hover:bg-blue-955/40 duration-150 p-2 text-[10px] font-black uppercase bg-blue-900 rounded-xl border border-blue-900/30 cursor-pointer text-center"
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (confirm(`Tem certeza de que deseja INATIVAR o aluno ${a.nome}? O acesso será suspenso, mas seu histórico completo (mensalidades, presenças, exames e graduações) permanecerá preservado.`)) {
+                                      handleDeleteAluno(a.id);
+                                    }
+                                  }}
+                                  className="text-red-500 hover:text-red-400 hover:bg-red-955/40 duration-150 p-2 text-[10px] font-black uppercase bg-red-900 rounded-xl border border-red-900/30 cursor-pointer text-center"
+                                >
+                                  Excluir
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                     ))
                 )}
               </div>
+
+              {/* Modal de Dossiê e Ficha Histórica do Aluno */}
+              {selectedFichaAluno && (
+                <FichaAlunoModal
+                  aluno={selectedFichaAluno}
+                  presencas={presencas}
+                  pagamentos={pagamentos}
+                  graduacoes={graduacoes}
+                  exames={exames}
+                  alunoModalidades={alunoModalidades}
+                  onClose={() => setSelectedFichaAluno(null)}
+                />
+              )}
+
+              {/* Modal de Lançamento de Exame de Faixa Real no Firestore */}
+              {alunoSelecionadoExame && (
+                <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                  <div className="bg-zinc-950 border border-zinc-900 rounded-3xl p-6 max-w-sm w-full space-y-4 text-left animate-fadeIn">
+                    <div className="flex justify-between items-center border-b border-zinc-900 pb-3">
+                      <div>
+                        <h4 className="text-xs font-black uppercase text-amber-500 tracking-wider">Lançar Exame de Faixa</h4>
+                        <p className="text-[10px] text-zinc-400 font-mono">Aluno: {alunoSelecionadoExame.nome}</p>
+                      </div>
+                      <button
+                        onClick={() => setAlunoSelecionadoExame(null)}
+                        className="text-zinc-500 hover:text-white font-extrabold text-[10px] uppercase font-mono"
+                      >
+                        [Fechar]
+                      </button>
+                    </div>
+
+                    <div className="space-y-2.5 text-xs">
+                      <div>
+                        <label className="block text-[9px] uppercase font-mono font-bold text-zinc-500 mb-1">Nova Faixa Pretendida</label>
+                        <select
+                          value={exameGradPretendida}
+                          onChange={(e) => setExameGradPretendida(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 p-2 rounded-lg focus:border-red-700 outline-none text-white font-mono text-[11px]"
+                        >
+                          {(() => {
+                            const studentMods: string[] = [];
+                            const rawModStr = alunoSelecionadoExame.modalidade || "";
+                            const rawModsArr = alunoSelecionadoExame.modalidades || [];
+                            
+                            // Parse modalities
+                            const list = rawModsArr.length > 0 
+                              ? rawModsArr 
+                              : rawModStr.split(",").map((x: string) => x.trim()).filter(Boolean);
+                              
+                            const normalized = list.map((m: string) => {
+                              if (m.toLowerCase().includes("tai chi") || m.toLowerCase().includes("taichi")) return "Tai Chi Chuan";
+                              if (m.toLowerCase().includes("boxe") || m.toLowerCase().includes("sanda")) return "Boxe Chinês";
+                              return "Kung Fu";
+                            });
+
+                            const uniqueMods = Array.from(new Set(normalized.length > 0 ? normalized : ["Kung Fu"]));
+
+                            const gradsByMod = (m: string) => {
+                              if (m === "Kung Fu") {
+                                return [
+                                  "Preparatória - Branca",
+                                  "1ª Fase - Branca Ponta Amarela",
+                                  "2ª Fase - Branca Ponta Verde",
+                                  "3ª Fase - Verde",
+                                  "4ª Fase - Verde Ponta Marrom",
+                                  "5ª Fase - Marrom",
+                                  "6ª Fase - Marrom Ponta Preta",
+                                  "7ª Fase - Preta",
+                                  "1º Dhuen - Preta",
+                                  "2º Dhuen - Preta",
+                                  "3º Dhuen - Preta",
+                                  "4º Dhuen - Preta",
+                                  "5º Dhuen - Preta",
+                                  "6º Dhuen - Preta",
+                                  "7º Dhuen - Preta",
+                                  "8º Dhuen - Preta",
+                                  "9º Dhuen - Preta"
+                                ];
+                              }
+                              if (m === "Tai Chi Chuan") {
+                                return [
+                                  "Preparatória - Branca",
+                                  "1ª Fase - Branca Ponta Amarela",
+                                  "2ª Fase - Branca Ponta Verde",
+                                  "3ª Fase - Verde"
+                                ];
+                              }
+                              if (m === "Boxe Chinês") {
+                                return [
+                                  "Preparatória - Branca",
+                                  "1ª Fase - Laranja",
+                                  "2ª Fase - Vermelha",
+                                  "3ª Fase - Azul",
+                                  "4ª Fase - Marrom",
+                                  "5ª Fase - Preta"
+                                ];
+                              }
+                              return ["Preparatória - Branca"];
+                            };
+
+                            const allOptions = Array.from(new Set(
+                              (uniqueMods as string[]).flatMap((m: string) => gradsByMod(m))
+                            ));
+
+                            return allOptions.map(opt => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ));
+                          })()}
+                        </select>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[9px] uppercase font-mono font-bold text-zinc-500 mb-1">Nota Téc. (0-10)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="10"
+                            step="0.1"
+                            value={exameNotaTec}
+                            onChange={(e) => setExameNotaTec(parseFloat(e.target.value) || 0)}
+                            className="w-full bg-zinc-900 border border-zinc-800 p-2 rounded-lg focus:border-red-700 outline-none text-white font-mono text-[11px]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] uppercase font-mono font-bold text-zinc-500 mb-1">Nota Teor. (0-10)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="10"
+                            step="0.1"
+                            value={exameNotaTeor}
+                            onChange={(e) => setExameNotaTeor(parseFloat(e.target.value) || 0)}
+                            className="w-full bg-zinc-900 border border-zinc-800 p-2 rounded-lg focus:border-red-700 outline-none text-white font-mono text-[11px]"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[9px] uppercase font-mono font-bold text-zinc-500 mb-1">Data Exame</label>
+                          <input
+                            type="date"
+                            value={exameData}
+                            onChange={(e) => setExameData(e.target.value)}
+                            className="w-full bg-zinc-900 border border-zinc-800 p-2 rounded-lg focus:border-red-700 outline-none text-white font-mono text-[11px]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[9px] uppercase font-mono font-bold text-zinc-500 mb-1">Resultado</label>
+                          <select
+                            value={exameStatus}
+                            onChange={(e) => setExameStatus(e.target.value as any)}
+                            className="w-full bg-zinc-900 border border-zinc-800 p-2 rounded-lg focus:border-red-700 outline-none text-white font-mono text-[11px]"
+                          >
+                            <option value="Aprovado">Aprovado (Promover)</option>
+                            <option value="Reprovado">Reprovado</option>
+                            <option value="Pendente">Pendente / Agendado</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[9px] uppercase font-mono font-bold text-zinc-500 mb-1">Avaliador</label>
+                        <input
+                          type="text"
+                          value={exameAvaliador}
+                          onChange={(e) => setExameAvaliador(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 p-2 rounded-lg focus:border-red-700 outline-none text-white font-mono text-[11px]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[9px] uppercase font-mono font-bold text-zinc-500 mb-1">Observações Gerais</label>
+                        <textarea
+                          rows={1.5}
+                          value={exameObs}
+                          onChange={(e) => setExameObs(e.target.value)}
+                          className="w-full bg-zinc-900 border border-zinc-800 p-2 rounded-lg focus:border-red-700 outline-none text-white font-mono text-[11px] resize-none"
+                          placeholder="Manejo das posturas..."
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-1.5">
+                      <button
+                        onClick={() => setAlunoSelecionadoExame(null)}
+                        className="flex-1 p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-405 rounded-xl font-bold uppercase transition-colors text-[10px] text-center"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const dataObj = {
+                            graduacaoPretendida: exameGradPretendida,
+                            dataExame: exameData,
+                            notaTecnica: exameNotaTec,
+                            notaTeorica: exameNotaTeor,
+                            avaliador: exameAvaliador,
+                            resultado: exameStatus,
+                            observacoes: exameObs
+                          };
+                          await handleSaveExame(dataObj, alunoSelecionadoExame);
+                          setAlunoSelecionadoExame(null);
+                        }}
+                        className="flex-1 p-2 bg-red-700 hover:bg-red-650 text-white rounded-xl font-black uppercase transition-colors text-[10px] text-center"
+                      >
+                        Gravar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1464,6 +2682,15 @@ export default function App() {
             <Relatorios
               pagamentos={pagamentos}
               handleCopyPixKey={handleCopyPixKey}
+              alunos={alunos}
+              turmas={turmas}
+              presencas={presencas}
+              produtos={produtos}
+              vendas={vendas}
+              familias={familias}
+              activeRole={activeRole}
+              alunoModalidades={alunoModalidades}
+              exames={exames}
             />
           )}
 
@@ -1476,6 +2703,8 @@ export default function App() {
                 activeRole={activeRole}
                 sendPasswordReset={sendPasswordReset}
                 logout={logout}
+                onUpdateCadastro={handleUpdateCadastroProfile}
+                alunoFicha={defaultStudent}
               />
 
               {/* Global Config Settings Form ONLY if ADMIN */}
@@ -1488,11 +2717,28 @@ export default function App() {
                   <AdminPanel
                     alunos={alunos}
                     turmas={turmas}
+                    instrutores={instrutores}
                     pagamentos={pagamentos}
                     config={config}
+                    produtos={produtos}
+                    vendas={vendas}
+                    familias={familias}
+                    presencas={presencas}
+                    onSaveProduto={handleSaveProduto}
+                    onDeleteProduto={handleDeleteProduto}
+                    onSaveVenda={handleSaveVenda}
+                    onSaveFamilia={handleSaveFamilia}
+                    onDeleteFamilia={handleDeleteFamilia}
+                    onSaveMensalidade={handleSaveMensalidade}
+                    onDeleteMensalidade={handleDeleteMensalidade}
+                    onGenerateMensalidadesLote={handleGenerateMensalidadesLote}
+                    activeRole={activeRole}
                     onAddAluno={handleAddAluno}
                     onDeleteAluno={handleDeleteAluno}
                     onUpdateStatusFinanceiro={handleUpdateStatusFinanceiro}
+                    onSaveInstrutor={handleSaveInstrutor}
+                    onDeleteInstrutor={handleDeleteInstrutor}
+                    onUpdateTurma={handleUpdateTurmaInstrutor}
                     onUpdateConfig={(newCfg) => {
                       handleUpdateConfig(newCfg);
                       alert("Configurações atualizadas!");

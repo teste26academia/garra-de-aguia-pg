@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Aluno, Turma, Presenca, Pagamento, GraduacaoSash } from "../types";
+import { Aluno, Turma, Presenca, Pagamento } from "../types";
 import { Award, CheckCircle, Copy, CreditCard, Calendar, FileText, Footprints, Sparkles, Smartphone, Plus, Clock, HelpCircle, XCircle } from "lucide-react";
 
 interface StudentPanelProps {
@@ -41,10 +41,16 @@ export default function StudentPanel({ aluno, turma, presencas, pagamentos, onSo
       return;
     }
 
-    // Check if there is already a presence record for this specific date
-    const exists = studentPresencas.some(p => p.data === selectedDate);
-    if (exists) {
-      setRequestStatusMsg("Você já possui um registro de presença ou solicitação pendente para esta data!");
+    const isInactive = (aluno.status || "").toUpperCase().trim() === "INATIVO";
+    if (isInactive) {
+      setRequestStatusMsg("❌ Acesso suspenso: Alunos inativos não podem solicitar presença ou realizar novos check-ins.");
+      return;
+    }
+
+    // Check if there are already 2 presence records for this specific date (allows up to 2 for different classes/modalities)
+    const singleDayPresences = studentPresencas.filter(p => p.data === selectedDate);
+    if (singleDayPresences.length >= 2) {
+      setRequestStatusMsg("Você já atingiu o limite máximo de 2 registros de presença para esta data!");
       return;
     }
 
@@ -53,22 +59,117 @@ export default function StudentPanel({ aluno, turma, presencas, pagamentos, onSo
     setTimeout(() => setRequestStatusMsg(""), 6000);
   };
 
-  // Defining belt roadmap order
-  const sashesRoadmap = [
-    { sash: GraduacaoSash.BRANCA, label: "Branca", colorBg: "bg-zinc-100", colorText: "text-zinc-900", desc: "Primeiras posturas fundamentais (Ma Bu, Gong Bu)." },
-    { sash: GraduacaoSash.AMARELA, label: "Amarela", colorBg: "bg-yellow-400/90", colorText: "text-zinc-950", desc: "Chutes básicos, punhos e rotinas iniciais." },
-    { sash: GraduacaoSash.LARANJA, label: "Laranja", colorBg: "bg-orange-500", colorText: "text-white", desc: "Lian Bu Quan (Punho de Passos Combinados)." },
-    { sash: GraduacaoSash.VERDE, label: "Verde", colorBg: "bg-emerald-600", colorText: "text-white", desc: "Técnicas intermediárias, agilidade de pernas." },
-    { sash: GraduacaoSash.AZUL, label: "Azul", colorBg: "bg-blue-600", colorText: "text-white", desc: "Chin Na (Chaves, Torções e Defesa Pessoal)." },
-    { sash: GraduacaoSash.VERMELHA, label: "Vermelha", colorBg: "bg-red-700", colorText: "text-white", desc: "Bastão tradicional (Gun Shu) e combate." },
-    { sash: GraduacaoSash.PRETA_1_DUAN, label: "Preta 1º Duan", colorBg: "bg-zinc-950 border border-amber-500", colorText: "text-amber-400", desc: "Início do verdadeiro caminho sênior e Wu De." }
+  // Estruturas de Roadmap Tradicionais para cada modalidade do aluno
+  const KUNG_FU_ROADMAP = [
+    { sash: "Preparatória - Branca", label: "Preparatória", colorBg: "bg-zinc-150 text-zinc-900 border-zinc-300", colorText: "text-zinc-900", desc: "Posturas fundamentais (Ma Bu, Gong Bu)." },
+    { sash: "1ª Fase - Branca Ponta Amarela", label: "1ª Fase", colorBg: "bg-yellow-400/90", colorText: "text-zinc-950", desc: "Chutes básicos, punhos e rotinas iniciais." },
+    { sash: "2ª Fase - Branca Ponta Verde", label: "2ª Fase", colorBg: "bg-emerald-200", colorText: "text-emerald-950", desc: "Coordenação motora avançada." },
+    { sash: "3ª Fase - Verde", label: "3ª Fase", colorBg: "bg-emerald-600", colorText: "text-white", desc: "Lian Bu Quan (Punho de Passos Combinados)." },
+    { sash: "4ª Fase - Verde Ponta Marrom", label: "4ª Fase", colorBg: "bg-amber-600", colorText: "text-white", desc: "Combinações intermediárias e flexibilidade." },
+    { sash: "5ª Fase - Marrom", label: "5ª Fase", colorBg: "bg-amber-800", colorText: "text-white", desc: "Chin Na (Chaves, Torções e Defesa Pessoal)." },
+    { sash: "6ª Fase - Marrom Ponta Preta", label: "6ª Fase", colorBg: "bg-zinc-800", colorText: "text-amber-300", desc: "Refinamento técnico e preparação sênior." },
+    { sash: "7ª Fase - Preta", label: "7ª Fase", colorBg: "bg-zinc-950 border border-amber-500", colorText: "text-amber-400", desc: "Início do verdadeiro caminho sênior e Wu De." }
   ];
 
-  // Find index of student's current sash in roadmap
-  const currentSashIndex = sashesRoadmap.findIndex(b => b.sash === aluno.graduacao);
+  const TAI_CHI_ROADMAP = [
+    { sash: "Preparatória - Branca", label: "Preparatória", colorBg: "bg-zinc-150 text-zinc-900 border-zinc-300", colorText: "text-zinc-900", desc: "Foco inicial no Qi, posturas básicas e respiração." },
+    { sash: "1ª Fase - Branca Ponta Amarela", label: "1ª Fase", colorBg: "bg-yellow-400/90", colorText: "text-zinc-950", desc: "Exercícios de equilíbrio e serenidade." },
+    { sash: "2ª Fase - Branca Ponta Verde", label: "2ª Fase", colorBg: "bg-emerald-200", colorText: "text-emerald-950", desc: "Formas curtas tradicionais." },
+    { sash: "3ª Fase - Verde", label: "3ª Fase", colorBg: "bg-emerald-650", colorText: "text-white", desc: "Formas intermediárias e fluxo de energia." }
+  ];
+
+  const BOXE_CHINES_ROADMAP = [
+    { sash: "Preparatória - Branca", label: "Preparatória", colorBg: "bg-zinc-150 text-zinc-900 border-zinc-300", colorText: "text-zinc-900", desc: "Iniciação técnica e guarda defensiva." },
+    { sash: "1ª Fase - Laranja", label: "1ª Fase", colorBg: "bg-orange-500", colorText: "text-white", desc: "Combinações de socos e esquivas básicas." },
+    { sash: "2ª Fase - Vermelha", label: "2ª Fase", colorBg: "bg-red-650", colorText: "text-white", desc: "Sanda intermediário e técnicas de chute." },
+    { sash: "3ª Fase - Azul", label: "3ª Fase", colorBg: "bg-blue-600", colorText: "text-white", desc: "Técnicas de projeção (Shuai Jiao) e quedas." },
+    { sash: "4ª Fase - Marrom", label: "4ª Fase", colorBg: "bg-amber-800", colorText: "text-white", desc: "Estratégia avançada de sparring competitivo." },
+    { sash: "5ª Fase - Preta", label: "5ª Fase", colorBg: "bg-zinc-950 border border-amber-500", colorText: "text-amber-400", desc: "Domínio técnico de combate e maestria." }
+  ];
+
+  // Determinar quais roadmaps exibir dinamicamente baseado nas modalidades do aluno
+  const activeRoadmaps: { title: string; nodes: { sash: string; label: string; colorBg: string; colorText: string; desc: string }[]; currentSash: string }[] = [];
+  const normalizedMod = (aluno.modalidade || "").toLowerCase();
+
+  if (normalizedMod.includes("kung fu")) {
+    activeRoadmaps.push({ title: "Kung Fu", nodes: KUNG_FU_ROADMAP, currentSash: aluno.graduacao || "Preparatória - Branca" });
+  }
+  if (normalizedMod.includes("tai chi")) {
+    activeRoadmaps.push({ title: "Tai Chi Chuan", nodes: TAI_CHI_ROADMAP, currentSash: aluno.graduacao || "Preparatória - Branca" });
+  }
+  if (normalizedMod.includes("boxe") || normalizedMod.includes("sanda")) {
+    activeRoadmaps.push({ title: "Boxe Chinês / Sanda", nodes: BOXE_CHINES_ROADMAP, currentSash: aluno.graduacao || "Preparatória - Branca" });
+  }
+
+  // Fallback se nenhum bater
+  if (activeRoadmaps.length === 0) {
+    activeRoadmaps.push({ title: "Kung Fu", nodes: KUNG_FU_ROADMAP, currentSash: aluno.graduacao || "Preparatória - Branca" });
+  }
+
+  // Calcular completude de forma leve para o aviso do portal
+  const completudeInfo = (() => {
+    let count = 0;
+    const pendentes: string[] = [];
+
+    if (aluno.cpf && aluno.cpf.trim() !== "" && aluno.cpf !== "(Não cadastrado)") count += 15;
+    else pendentes.push("CPF");
+
+    if (aluno.rg && aluno.rg.trim() !== "") count += 15;
+    else pendentes.push("RG");
+
+    if (aluno.dataNascimento && aluno.dataNascimento.trim() !== "" && aluno.dataNascimento !== "2000-01-01") count += 15;
+    else pendentes.push("Data de Nascimento");
+
+    const tel = aluno.telefone || aluno.celular;
+    if (tel && tel.trim() !== "" && tel !== "(Não cadastrado)") count += 15;
+    else pendentes.push("Telefone");
+
+    if (aluno.endereco && aluno.endereco.trim() !== "") count += 15;
+    else pendentes.push("Endereço");
+
+    if (aluno.foto && aluno.foto.trim() !== "") count += 10;
+    else pendentes.push("Foto");
+
+    let isMenor = false;
+    if (aluno.dataNascimento && aluno.dataNascimento !== "2000-01-01") {
+      try {
+        const nasc = new Date(aluno.dataNascimento);
+        const idadeDifMs = Date.now() - nasc.getTime();
+        const idadeDate = new Date(idadeDifMs);
+        const idade = Math.abs(idadeDate.getUTCFullYear() - 1970);
+        isMenor = idade < 18;
+      } catch {}
+    }
+
+    if (isMenor) {
+      if (aluno.responsavel && aluno.responsavel.trim() !== "") count += 15;
+      else pendentes.push("Responsável");
+    } else {
+      count += 15;
+    }
+
+    return { percent: Math.min(count, 100), pendentes };
+  })();
 
   return (
     <div className="space-y-6">
+      {/* Alerta de Completude de Cadastro no Topo do Painel */}
+      {completudeInfo.percent < 100 && (
+        <div className="p-4 bg-red-950/20 border border-red-900/40 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-fadeIn text-left shadow-lg">
+          <div className="space-y-1">
+            <h4 className="text-xs font-black text-amber-500 uppercase tracking-wider font-mono flex items-center gap-1.5">
+              ⚠️ Portal Limitado - Cadastro Incompleto
+            </h4>
+            <p className="text-[11px] text-zinc-300 leading-relaxed font-sans">
+              Complete seu cadastro no menu <strong className="text-white uppercase">"Menu & Perfil"</strong> para liberar todos os recursos da plataforma acadêmica da escola.
+            </p>
+          </div>
+          <span className="shrink-0 text-[10px] bg-red-950 text-red-450 border border-red-900/45 font-mono font-bold px-2.5 py-1 rounded-xl">
+            {completudeInfo.percent}% Preenchido
+          </span>
+        </div>
+      )}
+
       {/* Cards Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
@@ -171,7 +272,10 @@ export default function StudentPanel({ aluno, turma, presencas, pagamentos, onSo
               <button
                 id="btn-aluno-checkin"
                 onClick={handleSendCheckin}
-                className="w-full py-2.5 bg-gradient-to-r from-red-800 to-amber-600 hover:from-red-900 hover:to-amber-700 text-white rounded font-bold text-xs transition-all shadow-md active:scale-98 flex items-center justify-center gap-1.5"
+                disabled={(aluno.status || "").toUpperCase().trim() === "INATIVO"}
+                className={`w-full py-2.5 bg-gradient-to-r from-red-800 to-amber-600 hover:from-red-900 hover:to-amber-700 text-white rounded font-bold text-xs transition-all shadow-md active:scale-98 flex items-center justify-center gap-1.5 ${
+                  (aluno.status || "").toUpperCase().trim() === "INATIVO" ? "opacity-50 cursor-not-allowed filter grayscale" : ""
+                }`}
               >
                 <Smartphone className="w-4 h-4" />
                 SOLICITAR ENTRADA (CHECK-IN)
@@ -257,48 +361,67 @@ export default function StudentPanel({ aluno, turma, presencas, pagamentos, onSo
       </div>
 
       {/* Belt roadmap progression visualizer */}
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-md space-y-4">
+      <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 shadow-md space-y-6">
         <div>
           <h3 className="text-base font-bold text-white flex items-center gap-1.5">
             <Sparkles className="w-4 h-4 text-amber-400" />
-            Sua Trilha de Evolução e Graduação (Ying Jow Pai)
+            Sua Trilha de Evolução e Graduação Tradicional
           </h3>
-          <p className="text-xs text-zinc-400">Acompanhe seu progresso tradicional pelos sashes da Garra de Águia até a Faixa Preta.</p>
+          <p className="text-xs text-zinc-400">Acompanhe seu progresso tradicional e o seu nível atual dentro de cada modalidade praticada.</p>
         </div>
 
-        {/* Horizontal linear nodes timeline */}
-        <div className="grid grid-cols-1 md:grid-cols-7 gap-4 pt-2">
-          {sashesRoadmap.map((b, i) => {
-            const isCompleted = i < currentSashIndex;
-            const isCurrent = i === currentSashIndex;
-            
-            return (
-              <div 
-                key={b.sash} 
-                className={`p-3 rounded-lg border flex flex-col justify-between space-y-2 transition-all ${
-                  isCurrent ? "bg-zinc-950 border-amber-500 scale-102 ring-2 ring-amber-950/80" :
-                  isCompleted ? "bg-zinc-900/60 border-emerald-900/40 opacity-70" :
-                  "bg-zinc-900/10 border-zinc-800/40 opacity-45 hover:opacity-55"
-                }`}
-              >
-                <div className="flex justify-between items-center">
-                  <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase font-mono ${b.colorBg} ${b.colorText}`}>
-                    {b.label}
-                  </span>
-                  {isCompleted && (
-                    <span className="text-[9px] text-emerald-400 font-black">✓ OK</span>
-                  )}
-                  {isCurrent && (
-                    <span className="text-[9px] text-amber-400 font-black animate-pulse">● ATUAL</span>
-                  )}
-                </div>
-                <div>
-                  <p className="text-[11px] text-zinc-300 font-sans leading-tight mt-1">{b.desc}</p>
-                </div>
+        {activeRoadmaps.map((rm) => {
+          const matchedIndex = rm.nodes.findIndex(n => (n.sash || "").toLowerCase() === (rm.currentSash || "").toLowerCase());
+          const currentSashIndex = matchedIndex >= 0 ? matchedIndex : 0;
+
+          return (
+            <div key={rm.title} className="space-y-3 pb-4 border-b border-zinc-800/60 last:border-none last:pb-0">
+              <div className="flex items-center gap-2">
+                <div className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300 font-mono">{rm.title}</h4>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-zinc-950 border border-zinc-850 text-amber-400 font-mono">
+                  Atual: {rm.currentSash}
+                </span>
               </div>
-            );
-          })}
-        </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 pt-1">
+                {rm.nodes.map((b, i) => {
+                  const isCompleted = i < currentSashIndex;
+                  const isCurrent = i === currentSashIndex;
+
+                  return (
+                    <div 
+                      key={b.sash} 
+                      className={`p-2.5 rounded-lg border flex flex-col justify-between space-y-1.5 transition-all ${
+                        isCurrent ? "bg-zinc-950 border-amber-500 scale-102 ring-1 ring-amber-950/80" :
+                        isCompleted ? "bg-zinc-900/60 border-emerald-950/30 opacity-70" :
+                        "bg-zinc-900/10 border-zinc-850/40 opacity-40 hover:opacity-50"
+                      }`}
+                    >
+                      <div className="flex justify-between items-center gap-1">
+                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase font-mono tracking-tighter truncate ${b.colorBg} ${b.colorText}`}>
+                          {b.label}
+                        </span>
+                        {isCompleted && (
+                          <span className="text-[9px] text-emerald-400 font-black shrink-0">✓</span>
+                        )}
+                        {isCurrent && (
+                          <span className="text-[8px] text-amber-400 font-black animate-pulse shrink-0">●</span>
+                        )}
+                      </div>
+                      <div>
+                        {/* Se for a atual, mostramos o nome exato da graduação, senão mostramos a descrição curta */}
+                        <p className="text-[9px] text-zinc-400 font-sans leading-tight line-clamp-2 mt-0.5">
+                          {isCurrent ? b.sash : b.desc}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Two column grid block of invoice and requirements */}

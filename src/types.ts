@@ -9,60 +9,75 @@ export enum UserRole {
   ALUNO = "ALUNO"
 }
 
-export enum GraduacaoSash {
-  BRANCA = "Branca (Iniciante)",
-  AMARELA = "Amarela",
-  LARANJA = "Laranja",
-  VERDE = "Verde",
-  AZUL = "Azul",
-  VERMELHA = "Vermelha",
-  ROXA = "Roxa",
-  MARROM = "Marrom",
-  PRETA_1_DUAN = "Preta - 1º Duan (Instrutor)",
-  PRETA_2_DUAN = "Preta - 2º Duan",
-  PRETA_3_DUAN = "Preta - 3º Duan (Professor)"
-}
+
 
 export interface Aluno {
   id: string;
+  userId: string; // ID link from users collection
   nome: string;
-  email: string;
-  celular: string;
   cpf: string;
+  rg: string;
   dataNascimento: string;
-  graduacao: GraduacaoSash;
+  telefone: string;
+  whatsapp: string;
+  email: string;
+  endereco: string;
+  responsavel: string;
+  foto: string;
+  dataMatricula: string;
+  graduacaoAtual: string; // "Preparatória - Branca", "1ª Fase - Branca Ponta Amarela", etc.
   dataUltimaGraduacao: string;
-  status: "Ativo" | "Inativo";
+  status: "Ativo" | "Inativo" | "Pendente" | "ATIVO" | "INATIVO" | "PENDENTE";
   turmaId: string;
-  planoTipo: "1x_semana" | "2x_semana" | "3x_semana" | "4x_semana" | "outro";
-  mensalidade: number; // Valor bruto do plano
-  descontoFamiliaTipo: "percentual" | "fixo" | "nenhum";
-  descontoFamiliaValor: number; // Valor ou % de desconto configurado
-  statusFinanceiro: "Em Dia" | "Atrasado" | "Pendente";
-  observacoes?: string;
-  endereco?: string;
+  modalidade: string;
+  modalidades?: string[];
+  observacoes: string;
+  statusFinanceiro: "EM DIA" | "PENDENTE" | "ATRASADO" | "ISENTO" | "Em Dia" | "Atrasado" | "Pendente" | "Isento";
+
+  // Compatibility flags for legacy code
+  graduacao?: string;
+  celular?: string;
+  planoTipo?: "1x_semana" | "2x_semana" | "3x_semana" | "4x_semana" | "outro";
+  mensalidade?: number;
+  descontoFamiliaTipo?: "percentual" | "fixo" | "nenhum";
+  descontoFamiliaValor?: number;
 }
 
 export interface Turma {
   id: string;
   nomeEstilo: string; // Ex: Louva-a-Deus, Wing Chun, Tai Chi Chuan, Sanshou (Sanda)
-  instrutorId: string;
-  instrutorNome: string;
+  instrutorId: string; // ID from instrutores collection
+  instrutorNome: string; // Name from instrutores collection
   diasSemana: string[]; // Ex: ["Segunda", "Quarta", "Sexta"]
   horario: string; // Ex: "19:00 - 20:30"
   categoria: "Iniciante" | "Intermediário" | "Avançado" | "Misto";
   capacidade: number;
 }
 
+export interface Instrutor {
+  id: string;
+  nome: string;
+  funcao: string;
+  telefone: string;
+  email: string;
+  ativo: boolean;
+  observacoes: string;
+}
+
 export interface Presenca {
   id: string;
-  turmaId: string;
   alunoId: string;
-  alunoNome: string;
+  modalidade?: string;
   data: string; // YYYY-MM-DD
+  horario?: string; // Ex: "15:00 às 16:00"
   status: "PENDING" | "APPROVED" | "REJECTED" | "Presente" | "Faltou" | "Justificado";
+  confirmadoPor?: string;
+
+  // Compatibility fields for legacy views
+  turmaId?: string;
+  alunoNome?: string;
   observacao?: string;
-  solicitadoPorAluno?: boolean; // True se foi enviado pelo app do celular do aluno
+  solicitadoPorAluno?: boolean;
 }
 
 export interface GlobalConfigs {
@@ -77,31 +92,128 @@ export interface GlobalConfigs {
 export interface HistoricoGraduacao {
   id: string;
   alunoId: string;
-  alunoNome: string;
-  sashAnterior: GraduacaoSash;
-  sashNovo: GraduacaoSash;
-  dataExame: string;
+  graduacaoAnterior: string; // "Preparatória - Branca", etc.
+  graduacaoNova: string; // "1ª Fase - Branca Ponta Amarela", etc.
+  dataGraduacao: string; // YYYY-MM-DD
   avaliador: string;
-  notaTecnica: number;
-  notaFilosofica: number;
-  status: "Acesso Permitido" | "Aprovado" | "Pendente";
+  observacoes: string;
+  resultado: string; // "Aprovado", "Reprovado", etc.
+
+  // Compatibility fields for old pages
+  alunoNome?: string;
+  sashAnterior?: string;
+  sashNovo?: string;
+  dataExame?: string;
+  status?: string;
+  notaTecnica?: number;
+  notaFilosofica?: number;
 }
 
+// Keep Pagamento alias/interface mapped directly to Mensalidade structure
 export interface Pagamento {
   id: string;
   alunoId: string;
-  alunoNome: string;
+  referencia: string; // "06/2026"
+  competencia?: string; // "06/2026" - Nova especificação
+  vencimento: string; // YYYY-MM-DD
   valor: number;
-  dataVencimento: string;
+  desconto?: number;
+  valorFinal: number;
+  status: "EM DIA" | "PENDENTE" | "ATRASADO" | "ISENTO" | "Pago" | "Pendente" | "Atrasado" | "PENDENTE" | "PAGO" | "VENCIDO" | "Vencido";
   dataPagamento?: string;
-  status: "Pago" | "Pendente" | "Atrasado";
-  metodo?: "PIX" | "Cartão" | "Dinheiro" | "Boleto";
+  formaPagamento?: string; // Nova especificação
+  observacoes?: string; // Nova especificação
+
+  // Compatibility fields
+  alunoNome?: string;
+  dataVencimento?: string;
+  metodo?: string;
 }
 
 export interface UserProfile {
   uid: string;
   nome: string;
   email: string;
+  telefone?: string;
+  whatsapp?: string;
   role: UserRole;
+  createdAt?: string;
+  ativo?: boolean;
   alunoId?: string; // se for Aluno, linka com o Aluno.id
+  celular?: string;
+  endereco?: string;
+}
+
+export interface Exame {
+  id: string;
+  alunoId: string;
+  graduacaoPretendida: string;
+  avaliador: string;
+  dataExame: string;
+  notaTecnica: number;
+  notaTeorica: number;
+  observacoes: string;
+  resultado: "APROVADO" | "REPROVADO" | "PENDENTE" | string;
+  alunoNome?: string;
+}
+
+export interface Produto {
+  id: string;
+  nome: string;
+  categoria: string;
+  estoque: number;
+  estoqueMinimo: number;
+  valorVenda: number;
+  ativo: boolean;
+
+  // Compatibility fields
+  valor?: number;
+}
+
+export interface Venda {
+  id: string;
+  data: string; // YYYY-MM-DD
+  alunoId: string;
+  alunoNome: string;
+  produtoId: string;
+  produtoNome: string;
+  quantidade: number;
+  valorUnitario: number;
+  valorTotal: number;
+  formaPagamento: string;
+
+  // Compatibility fields
+  valor?: number;
+  dataVenda?: string;
+}
+
+export interface Familia {
+  id: string;
+  nomeFamilia: string;
+  responsavel: string;
+  telefone: string;
+  alunosIds: string[];
+
+  // Compatibility fields
+  nome?: string;
+}
+
+export interface GraduacoesConfig {
+  id: string;
+  modalidade: string;
+  ordem: number;
+  graduacao: string;
+  faixa: string;
+  ativo: boolean;
+}
+
+export interface AlunoModalidade {
+  id: string;
+  alunoId: string;
+  modalidade: string;
+  graduacaoAtual: string;
+  faixaAtual: string;
+  ordemGraduacao: number;
+  dataUltimaGraduacao: string;
+  ativo: boolean;
 }

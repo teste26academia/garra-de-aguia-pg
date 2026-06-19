@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import logoImg from "../assets/logo_oficial.png";
 
 export function BrasaoOficial({ className = "w-16 h-16" }: { className?: string }) {
   const [hasError, setHasError] = useState<boolean>(false);
@@ -11,7 +12,7 @@ export function BrasaoOficial({ className = "w-16 h-16" }: { className?: string 
         style={{ width: "inherit", height: "inherit" }}
       >
         <span className="text-[10px] leading-tight uppercase font-black font-mono tracking-wider">[Erro de carregamento do brasão oficial]</span>
-        <span className="text-[8px] font-normal mt-1 opacity-60 text-zinc-500 font-sans">Verifique /public/logo.png</span>
+        <span className="text-[8px] font-normal mt-1 opacity-60 text-zinc-500 font-sans">Verifique /public/logo_oficial.png</span>
       </div>
     );
   }
@@ -19,7 +20,7 @@ export function BrasaoOficial({ className = "w-16 h-16" }: { className?: string 
   return (
     <img
       id="img-logo-oficial"
-      src="logo.png"
+      src={logoImg}
       alt="Brasão Oficial Garra de Águia"
       className={`${className} object-contain`}
       onError={() => setHasError(true)}

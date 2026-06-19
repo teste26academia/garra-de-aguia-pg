@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Plus, Search, Trash2 } from "lucide-react";
 import AdminPanel from "./AdminPanel";
 import { Aluno, Turma, Pagamento, GlobalConfigs } from "../types";
@@ -34,6 +34,20 @@ export function Alunos({
   handleUpdateStatusFinanceiro,
   handleUpdateConfig
 }: AlunosProps) {
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  const filteredAlunos = alunos.filter(a => (a.nome || "").toLowerCase().includes((searchTerm || "").toLowerCase()));
+  const totalPages = Math.ceil(filteredAlunos.length / itemsPerPage);
+  
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredAlunos.slice(indexOfFirstItem, indexOfLastItem);
+
   return (
     <div className="space-y-4 animate-fadeIn" id="alunos-tab-content">
       {/* Header and Add button if Admin */}
@@ -90,67 +104,88 @@ export function Alunos({
 
       {/* Student list elements */}
       <div className="space-y-2.5" id="students-list-container">
-        {alunos.filter(a => a.nome.toLowerCase().includes(searchTerm.toLowerCase())).length === 0 ? (
+        {filteredAlunos.length === 0 ? (
           <p className="text-center text-xs text-zinc-550 py-8">Nenhum aluno encontrado na lista da academia.</p>
         ) : (
-          alunos
-            .filter(a => a.nome.toLowerCase().includes(searchTerm.toLowerCase()))
-            .map(a => (
-              <div 
-                key={a.id}
-                className="bg-zinc-950 border border-zinc-900 rounded-2xl p-4 text-left flex items-center justify-between gap-4"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-xs font-black text-amber-500 uppercase">
-                    {a.nome?.substring(0, 2)}
-                  </div>
-                  <div className="leading-tight text-left space-y-1">
-                    <h4 className="text-xs font-bold text-white uppercase">{a.nome}</h4>
-                    <p className="text-[10px] font-mono text-zinc-500">
-                      CPF: {a.cpf || "não registrado"} • Cel: {a.celular || "não registrado"}
-                    </p>
-                    {a.endereco && (
-                      <p className="text-[10px] text-zinc-400 flex items-center gap-1 font-sans">
-                        📍 {a.endereco}
-                      </p>
-                    )}
-                    <div className="pt-0.5">
-                      <span className="inline-flex py-0.5 px-2 rounded-full bg-neutral-900 text-[8px] font-bold text-amber-400">
-                        {a.graduacao ? a.graduacao : "Branca"}
-                      </span>
-                    </div>
-                  </div>
+          currentItems.map(a => (
+            <div 
+              key={a.id}
+              className="bg-zinc-950 border border-zinc-900 rounded-2xl p-4 text-left flex items-center justify-between gap-4"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-xs font-black text-amber-500 uppercase">
+                  {a.nome?.substring(0, 2)}
                 </div>
-
-                {/* Status indicators */}
-                <div className="text-right space-y-1">
-                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] uppercase font-black font-mono leading-none ${
-                    a.statusFinanceiro === "Em Dia" ? "bg-emerald-950/40 text-emerald-400 border border-emerald-950/60" :
-                    a.statusFinanceiro === "Atrasado" ? "bg-red-950/40 text-red-500 border border-red-950/60" : "bg-zinc-900 text-zinc-400 border border-zinc-855"
-                  }`}>
-                    {a.statusFinanceiro}
-                  </span>
-                  {activeRole === "ADMIN" && (
-                    <div className="flex gap-1.5 justify-end text-right">
-                      <button
-                        onClick={() => {
-                          if (confirm(`Tem certeza de que deseja EXCLUIR permanentemente o aluno ${a.nome} e todo o seu histórico financeiro do sistema?`)) {
-                            handleDeleteAluno(a.id);
-                          }
-                        }}
-                        className="flex items-center gap-1 text-red-500 hover:text-red-400 text-[10px] font-mono uppercase bg-red-950/20 p-1.5 px-2.5 rounded-lg border border-red-950 hover:bg-red-950/40 transition-colors cursor-pointer"
-                        title="Excluir Aluno"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                        <span>Excluir</span>
-                      </button>
-                    </div>
+                <div className="leading-tight text-left space-y-1">
+                  <h4 className="text-xs font-bold text-white uppercase">{a.nome}</h4>
+                  <p className="text-[10px] font-mono text-zinc-500">
+                    CPF: {a.cpf || "não registrado"} • Cel: {a.celular || "não registrado"}
+                  </p>
+                  {a.endereco && (
+                    <p className="text-[10px] text-zinc-400 flex items-center gap-1 font-sans">
+                      📍 {a.endereco}
+                    </p>
                   )}
+                  <div className="pt-0.5">
+                    <span className="inline-flex py-0.5 px-2 rounded-full bg-neutral-900 text-[8px] font-bold text-amber-400">
+                      {a.graduacao ? a.graduacao : "Branca"}
+                    </span>
+                  </div>
                 </div>
               </div>
-            ))
+
+              {/* Status indicators */}
+              <div className="text-right space-y-1">
+                <span className={`inline-block px-2.5 py-0.5 rounded-full text-[9px] uppercase font-black font-mono leading-none ${
+                  a.statusFinanceiro === "Em Dia" ? "bg-emerald-950/40 text-emerald-400 border border-emerald-950/60" :
+                  a.statusFinanceiro === "Atrasado" ? "bg-red-950/40 text-red-500 border border-red-950/60" : "bg-zinc-900 text-zinc-400 border border-zinc-855"
+                }`}>
+                  {a.statusFinanceiro}
+                </span>
+                {activeRole === "ADMIN" && (
+                  <div className="flex gap-1.5 justify-end text-right">
+                    <button
+                      onClick={() => {
+                        if (confirm(`Tem certeza de que deseja EXCLUIR permanentemente o aluno ${a.nome} e todo o seu histórico financeiro do sistema?`)) {
+                          handleDeleteAluno(a.id);
+                        }
+                      }}
+                      className="flex items-center gap-1 text-red-500 hover:text-red-400 text-[10px] font-mono uppercase bg-red-950/20 p-1.5 px-2.5 rounded-lg border border-red-950 hover:bg-red-950/40 transition-colors cursor-pointer"
+                      title="Excluir Aluno"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                      <span>Excluir</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))
         )}
       </div>
+
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center gap-3 pt-4 pb-2">
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 transition-colors border border-zinc-800 rounded-lg text-[10px] font-bold uppercase tracking-wider text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Anterior
+          </button>
+          <span className="text-[10px] font-mono text-zinc-500">
+            Pág {currentPage} de {totalPages}
+          </span>
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="px-3 py-1.5 bg-neutral-900 hover:bg-neutral-800 transition-colors border border-zinc-800 rounded-lg text-[10px] font-bold uppercase tracking-wider text-zinc-300 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Próxima
+          </button>
+        </div>
+      )}
     </div>
   );
 }

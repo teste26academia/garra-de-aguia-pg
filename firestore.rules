@@ -1,96 +1,152 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
+    // --- SEGURANÇA GLOBAL E DEFESA DE DADOS ---
+
+    // Bloqueio padrão (Catch-All) para Segurança de Zero-Trust
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
     // Helper para verificar se o usuário está autenticado
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Helper para verificar se o usuário é o administrador principal pelo e-mail
-    function isMainAdminEmail() {
-      return isSignedIn() && request.auth.token.email.lower() == "deciopadovanijr@gmail.com";
+    // Identificação do Administrador Principal por e-mail (Seguro contra Spoofing)
+    function isMainAdmin() {
+      return isSignedIn() &&
+             request.auth.token != null &&
+             'email' in request.auth.token &&
+             request.auth.token.email == "deciopadovanijr@gmail.com";
     }
 
-    // Retorna o perfil do usuário atual do Firestore (se existir)
+    // Retorna o perfil do usuário atual de forma resiliente
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    // Verifica se o usuário tem cargo de Administrador (case-insensitive)
+    // Verifica se o usuário tem cargo de Administrador (Sem falhas na ausência do registro)
     function isAdmin() {
-      return isSignedIn() && (
-        isMainAdminEmail() ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         (getUserData().role == "ADMIN" || 
-          getUserData().role == "admin" || 
-          getUserData().role == "Admin" ||
-          getUserData().role == "ADMINISTRADOR" ||
-          getUserData().role == "administrador"))
-      );
-    }
-    
-    // Verifica se o usuário tem cargo de Instrutor/Professor (case-insensitive)
-    function isInstructor() {
-      return isSignedIn() && (
+      return isMainAdmin() || (
+        isSignedIn() &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        (getUserData().role == "INSTRUTOR" || 
-         getUserData().role == "instrutor" || 
-         getUserData().role == "PROFESSOR" || 
-         getUserData().role == "professor")
+        getUserData() != null &&
+        'role' in getUserData() &&
+        (getUserData().role == "ADMIN" || 
+         getUserData().role == "admin" || 
+         getUserData().role == "Admin" ||
+         getUserData().role == "ADMINISTRADOR" ||
+         getUserData().role == "administrador")
       );
     }
 
-    // Verifica se o usuário é dono do próprio ID correspondente
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    // Verifica se o usuário tem cargo de Instrutor/Professor (Robusto)
+    function isInstructor() {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             getUserData() != null &&
+             'role' in getUserData() &&
+             (getUserData().role == "INSTRUTOR" || 
+              getUserData().role == "instrutor" || 
+              getUserData().role == "PROFESSOR" || 
+              getUserData().role == "professor");
     }
 
-    // --- REGRAS POR COLEÇÃO (ROBUSTAS E COMPATÍVEIS) ---
+    // Helper de controle de propriedade de identificação do Aluno
+    function isStudentOwner(alunoId) {
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         getUserData() != null &&
+         'alunoId' in getUserData() &&
+         getUserData().alunoId == alunoId) ||
+        (resource != null && 'userId' in resource.data && resource.data.userId == request.auth.uid) ||
+        (resource != null && 'email' in resource.data && request.auth.token != null && 'email' in request.auth.token && resource.data.email == request.auth.token.email)
+      );
+    }
+
+    // Validação estática de IDs para prevenção de injeção de lixo (ID Poisoning Guard)
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- BLUEPRINTS DE VALIDAÇÃO DE ENTIDADES (Opcionais no write) ---
+
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'nome', 'email', 'role']) &&
+             data.uid is string && data.uid.size() <= 128 &&
+             data.nome is string && data.nome.size() <= 200 &&
+             data.email is string && data.email.size() <= 200 &&
+             data.role is string && (data.role == "ADMIN" || data.role == "admin" || data.role == "INSTRUTOR" || data.role == "instrutor" || data.role == "ALUNO" || data.role == "aluno");
+    }
+
+    // --- DEFINIÇÕES DE REGRAS POR COLEÇÃO ESPECÍFICA ---
 
     // 1. users (Perfis de Usuários)
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && (isOwner(userId) || isAdmin() || isInstructor());
+      allow create: if isSignedIn() && isValidId(userId) && request.auth.uid == userId && isValidUserProfile(request.resource.data) && (
+        isMainAdmin() || 
+        (!request.resource.data.keys().hasAny(['permissions', 'cargo']) && 
+         ('role' in request.resource.data && (request.resource.data.role == "ALUNO" || request.resource.data.role == "aluno")))
+      );
+      allow update: if isSignedIn() && isValidId(userId) && (
+        isAdmin() || 
+        (isInstructor() && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'permissions', 'cargo'])) ||
+        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'permissions', 'cargo']))
+      );
+      allow delete: if isSignedIn() && isAdmin();
+    }
+
+    // 1.5. instrutores
+    match /instrutores/{instrutorId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isValidId(instrutorId) && (isAdmin() || isInstructor());
     }
 
     // 2. alunos (Fichas dos Alunos)
     match /alunos/{alunoId} {
-      // Admins e Instrutores podem ler tudo. Alunos podem ler se o e-mail corresponder ao deles.
       allow read: if isSignedIn() && (
         isAdmin() || 
         isInstructor() || 
-        (request.auth.token.email != null && resource.data.email == request.auth.token.email)
+        (resource != null && 'email' in resource.data && request.auth.token != null && 'email' in request.auth.token && resource.data.email == request.auth.token.email)
       );
-      // Apenas administradores e professores/instrutores adicionam, atualizam ou deletam alunos
-      allow write: if isSignedIn() && (isAdmin() || isInstructor());
+      allow create: if isSignedIn() && isValidId(alunoId) && (
+        isAdmin() || 
+        isInstructor() || 
+        (request.resource != null && 'userId' in request.resource.data && request.resource.data.userId == request.auth.uid)
+      );
+      allow update: if isSignedIn() && isValidId(alunoId) && (
+        isAdmin() || 
+        isInstructor() ||
+        (isStudentOwner(alunoId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'cpf', 'rg', 'telefone', 'celular', 'endereco', 'foto', 'responsavel'
+        ]))
+      );
+      allow delete: if isSignedIn() && isAdmin();
     }
 
     // 3. turmas
     match /turmas/{turmaId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && (isAdmin() || isInstructor());
+      allow write: if isSignedIn() && isValidId(turmaId) && (isAdmin() || isInstructor());
     }
 
     // 4. presencas (Chamadas e Solicitações de Presença)
     match /presencas/{presencaId} {
-      // Qualquer usuário logado pode ler se for admin/instrutor ou se for o registro do próprio aluno
       allow read: if isSignedIn() && (
         isAdmin() || 
         isInstructor() || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         resource.data.alunoId == getUserData().alunoId)
+        (resource != null && 'alunoId' in resource.data && isStudentOwner(resource.data.alunoId))
       );
-      // Permitir criação se for admin/instrutor ou solicitação vinda do próprio aluno logado
-      allow create: if isSignedIn() && (
+      allow create: if isSignedIn() && isValidId(presencaId) && (
         isAdmin() || 
         isInstructor() || 
-        (request.resource.data.status == "PENDING" && 
-         request.resource.data.alunoId != null && 
-         exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         request.resource.data.alunoId == getUserData().alunoId)
+        (request.resource != null && 'status' in request.resource.data && 'alunoId' in request.resource.data &&
+         request.resource.data.status == "PENDING" && isStudentOwner(request.resource.data.alunoId))
       );
-      allow update: if isSignedIn() && (isAdmin() || isInstructor());
+      allow update: if isSignedIn() && isValidId(presencaId) && (isAdmin() || isInstructor());
       allow delete: if isSignedIn() && isAdmin();
     }
 
@@ -99,27 +155,85 @@ service cloud.firestore {
       allow read: if isSignedIn() && (
         isAdmin() || 
         isInstructor() || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         resource.data.alunoId == getUserData().alunoId)
+        (resource != null && 'alunoId' in resource.data && isStudentOwner(resource.data.alunoId))
       );
-      allow write: if isSignedIn() && (isAdmin() || isInstructor());
+      allow write: if isSignedIn() && isValidId(mensalidadeId) && (isAdmin() || isInstructor());
     }
 
-    // 6. exames (Histórico de Graduação)
+    // 6. graduacoes (Histórico de Graduação)
+    match /graduacoes/{graduacaoId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        isInstructor() || 
+        (resource != null && 'alunoId' in resource.data && isStudentOwner(resource.data.alunoId))
+      );
+      allow write: if isSignedIn() && isValidId(graduacaoId) && (isAdmin() || isInstructor());
+    }
+
+    // 7. exames (Avaliações Técnicas)
     match /exames/{exameId} {
       allow read: if isSignedIn() && (
         isAdmin() || 
         isInstructor() || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         resource.data.alunoId == getUserData().alunoId)
+        (resource != null && 'alunoId' in resource.data && isStudentOwner(resource.data.alunoId))
       );
-      allow write: if isSignedIn() && (isAdmin() || isInstructor());
+      allow write: if isSignedIn() && isValidId(exameId) && (isAdmin() || isInstructor());
     }
 
-    // 7. configuracoes (Configurações Gerais)
+    // 8. configuracoes (Configurações Gerais)
     match /configuracoes/{configuracaoId} {
       allow read: if isSignedIn();
-      allow write: if isSignedIn() && (isAdmin() || isInstructor());
+      allow write: if isSignedIn() && isValidId(configuracaoId) && (isAdmin() || isInstructor());
+    }
+
+    // 9. produtos
+    match /produtos/{produtoId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isValidId(produtoId) && (isAdmin() || isInstructor());
+    }
+
+    // 10. vendas
+    match /vendas/{vendaId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        isInstructor() || 
+        (resource != null && 'alunoId' in resource.data && isStudentOwner(resource.data.alunoId))
+      );
+      allow write: if isSignedIn() && isValidId(vendaId) && (isAdmin() || isInstructor());
+    }
+
+    // 11. familias
+    match /familias/{familiaId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        isInstructor() || 
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         getUserData() != null && 'alunoId' in getUserData() &&
+         getUserData().alunoId != null && 
+         resource != null && 'alunosIds' in resource.data &&
+         getUserData().alunoId in resource.data.alunosIds)
+      );
+      allow write: if isSignedIn() && isValidId(familiaId) && (isAdmin() || isInstructor());
+    }
+
+    // 12. graduacoes_config
+    match /graduacoes_config/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isValidId(configId) && (isAdmin() || isInstructor());
+    }
+
+    // 13. aluno_modalidades
+    match /aluno_modalidades/{alModId} {
+      allow read: if isSignedIn() && (
+        isAdmin() || 
+        isInstructor() || 
+        (resource != null && 'alunoId' in resource.data && isStudentOwner(resource.data.alunoId))
+      );
+      allow write: if isSignedIn() && isValidId(alModId) && (
+        isAdmin() || 
+        isInstructor() || 
+        (request.resource != null && 'alunoId' in request.resource.data && isStudentOwner(request.resource.data.alunoId))
+      );
     }
   }
 }

@@ -24,7 +24,6 @@ const productionFirebaseConfig = {
   storageBucket: "garra-de-aguia-pg.firebasestorage.app",
   messagingSenderId: "204499771784",
   appId: "1:204499771784:web:b0f672c7898ddd2050da3d",
-  firestoreDatabaseId: "" // Banco de dados padrão (default)
 };
 
 // Função auxiliar de higienização de string para remover aspas incorporadas e espaços em branco extras

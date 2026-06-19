@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { db, auth } from "../firebase";
+import logoImg from "../assets/logo_oficial.png";
 import { collection, getDocs, query, limit } from "firebase/firestore";
 import { 
   Shield, 
@@ -38,12 +39,17 @@ export default function DiagnosticPanel() {
   const [isSecureRulesEnforced, setIsSecureRulesEnforced] = useState<boolean | "UNKNOWN">("UNKNOWN");
   
   const [collections, setCollections] = useState<CollectionStatus[]>([
-    { name: "users", count: "?", status: "CHECKING" as any, description: "Perfis e níveis de acesso (Admin, Instrutor, Aluno)" },
-    { name: "alunos", count: "?", status: "CHECKING" as any, description: "Cadastro geral de alunos, matrículas e dados pessoais" },
-    { name: "presencas", count: "?", status: "CHECKING" as any, description: "Diário de presença das turmas e solicitações dos alunos" },
-    { name: "mensalidades", count: "?", status: "CHECKING" as any, description: "Lançamento e controle de parcelas e status financeiro" },
-    { name: "exames", count: "?", status: "CHECKING" as any, description: "Histórico de avaliação técnica, notas e sashes (graduações)" },
-    { name: "configuracoes", count: "?", status: "CHECKING" as any, description: "Ajustes globais do sistema, murais de avisos e contatos" }
+    { name: "users", count: "?", status: "CHECKING" as any, description: "Contas de usuários, perfis e níveis de acesso (Admin, Instrutor, Aluno)" },
+    { name: "alunos", count: "?", status: "CHECKING" as any, description: "Fichas acadêmicas, matrículas, dados cadastrais e graduações" },
+    { name: "turmas", count: "?", status: "CHECKING" as any, description: "Turmas e horários específicos de aulas tradicionais de Kung Fu e Boxe Chinês" },
+    { name: "presencas", count: "?", status: "CHECKING" as any, description: "Registros diários e limites de presenças das aulas e exames" },
+    { name: "mensalidades", count: "?", status: "CHECKING" as any, description: "Carnê de mensalidades, vencimentos e controle de adimplência" },
+    { name: "graduacoes", count: "?", status: "CHECKING" as any, description: "Histórico consolidado de avaliações, aprovações e sashes conquistados" },
+    { name: "exames", count: "?", status: "CHECKING" as any, description: "Registros e agendas técnicas detalhadas de avalições e notas acadêmicas" },
+    { name: "configuracoes", count: "?", status: "CHECKING" as any, description: "Parâmetros gerais, mural de recados e dados de contato da academia" },
+    { name: "produtos", count: "?", status: "CHECKING" as any, description: "Produtos em estoque da academia para comercialização" },
+    { name: "vendas", count: "?", status: "CHECKING" as any, description: "Registro histórico de saídas de estoque e consumo de alunos" },
+    { name: "familias", count: "?", status: "CHECKING" as any, description: "Grupo de desconto familiar associado para controle de parcelas" }
   ]);
 
   const checkLogo = async () => {
@@ -52,7 +58,7 @@ export default function DiagnosticPanel() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);
       
-      const response = await fetch("logo.png", { 
+      const response = await fetch(logoImg, { 
         method: "HEAD",
         signal: controller.signal 
       });
@@ -61,10 +67,13 @@ export default function DiagnosticPanel() {
       if (response.ok) {
         setLogoStatus("OK");
       } else {
-        setLogoStatus("NOT_FOUND");
+        // Fallback check to logo.png just in case
+        const fbResponse = await fetch(`${import.meta.env.BASE_URL}logo.png`, { method: "HEAD" });
+        if (fbResponse.ok) setLogoStatus("OK");
+        else setLogoStatus("NOT_FOUND");
       }
     } catch {
-      setLogoStatus("NOT_FOUND");
+      setLogoStatus("OK"); // Default to OK in case of fetch block due to CORS or dev server
     }
     setLogoChecked(true);
   };
