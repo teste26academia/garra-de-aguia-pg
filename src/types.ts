@@ -34,7 +34,7 @@ export interface Aluno {
   observacoes: string;
   statusFinanceiro: "EM DIA" | "PENDENTE" | "ATRASADO" | "ISENTO" | "Em Dia" | "Atrasado" | "Pendente" | "Isento";
 
-  // Compatibility flags for legacy code
+  matricula?: string;
   graduacao?: string;
   celular?: string;
   planoTipo?: "1x_semana" | "2x_semana" | "3x_semana" | "4x_semana" | "outro";

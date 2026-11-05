@@ -132,9 +132,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else {
             const loadedProfile = userDocSnap.data() as UserProfile;
             
-            // If the user is deciopadovanijr@gmail.com, force ADMIN role
+            // If the user is deciopadovanijr@gmail.com, force ADMIN role and clean up any contaminated student data
             if (firebaseUser.email === "deciopadovanijr@gmail.com") {
               loadedProfile.role = UserRole.ADMIN;
+              let needsProfileFix = false;
+              if (!loadedProfile.nome || loadedProfile.nome.toLowerCase().includes("fabiana")) {
+                loadedProfile.nome = "Décio Padovani Jr.";
+                needsProfileFix = true;
+              }
+              if (loadedProfile.alunoId) {
+                delete (loadedProfile as any).alunoId;
+                needsProfileFix = true;
+              }
+              if (needsProfileFix) {
+                setDoc(userDocRef, { 
+                  nome: "Décio Padovani Jr.", 
+                  role: UserRole.ADMIN, 
+                  alunoId: "" 
+                }, { merge: true }).catch(() => {});
+              }
             } else if (loadedProfile.role && loadedProfile.role.toLowerCase() === "admin") {
               loadedProfile.role = UserRole.ADMIN;
             } else if (loadedProfile.role && loadedProfile.role.toLowerCase() === "instrutor") {

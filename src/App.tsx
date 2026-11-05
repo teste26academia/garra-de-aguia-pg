@@ -831,7 +831,7 @@ export default function App() {
   }) => {
     if (!user || !userProfile) return;
     try {
-      // 1. Opcionalmente atualiza também na coleção de usuários do Auth (users)
+      // 1. Atualiza na coleção de usuários do Auth (users)
       const userRef = doc(db, "users", user.uid);
       await updateDoc(userRef, {
         nome: dados.nome,
@@ -844,7 +844,13 @@ export default function App() {
         ...(dados.responsavel ? { responsavel: dados.responsavel } : {})
       });
 
-      // 2. Se o usuário atual possui alunoId, atualiza também a ficha do aluno (alunos)
+      // Se o usuário for Administrador ou Instrutor, o perfil pessoal é apenas em users
+      if (userProfile.role !== "ALUNO") {
+        alert("Perfil atualizado com sucesso!");
+        return;
+      }
+
+      // 2. Se for ALUNO, atualiza também a sua ficha de aluno (alunos)
       const targetAlunoId = userProfile.alunoId || `stu_${user.uid}`;
       const studentRef = doc(db, "alunos", targetAlunoId);
 
@@ -1761,31 +1767,31 @@ export default function App() {
     );
   }
 
-  // Active student calculation based on authenticated account linkage and lists
+  // Active student calculation based strictly on authenticated account linkage
   let defaultStudent: Aluno | undefined = undefined;
   if (userProfile && userProfile.role === "ALUNO") {
-    // 1. Tentar encontrar pelo alunoId vinculado no perfil
+    // 1. Tentar encontrar pelo alunoId vinculado no perfil de usuário
     if (userProfile.alunoId) {
       defaultStudent = alunos.find(a => a.id === userProfile.alunoId);
     }
-    // 2. Se não encontrou, tentar encontrar pelo email (case-insensitive) do usuário logado
+    // 2. Se não encontrou pelo alunoId, tentar por userId (UID do Firebase Auth)
+    if (!defaultStudent && userProfile.uid) {
+      defaultStudent = alunos.find(a => a.userId === userProfile.uid || a.id === `stu_${userProfile.uid}`);
+    }
+    // 3. Se não encontrou, tentar pelo e-mail exato (case-insensitive) do usuário logado
     if (!defaultStudent && userProfile.email) {
       const emailLower = userProfile.email.trim().toLowerCase();
       defaultStudent = alunos.find(a => a.email && a.email.trim().toLowerCase() === emailLower);
     }
-    // 3. Se ainda não encontrou mas temos algum aluno na lista restrita dele do onSnapshot (que já aplica o filtro)
-    if (!defaultStudent && alunos.length > 0) {
-      defaultStudent = alunos[0];
-    }
-    // 4. Fallback final: Objeto mockado do aluno
+    // 4. Objeto de perfil para aluno autenticado se não houver ficha salva na coleção
     if (!defaultStudent) {
       defaultStudent = {
         id: userProfile.alunoId || `stu_${userProfile.uid}`,
-        nome: userProfile.nome || "Membro",
+        nome: userProfile.nome || user?.displayName || "Aluno",
         email: userProfile.email || "",
-        celular: "(Não cadastrado)",
-        cpf: "(Não cadastrado)",
-        dataNascimento: "",
+        celular: userProfile.celular || userProfile.telefone || "",
+        cpf: userProfile.cpf || "",
+        dataNascimento: userProfile.dataNascimento || "",
         graduacao: "Preparatória - Branca",
         dataUltimaGraduacao: "",
         status: "Ativo" as const,
@@ -1795,12 +1801,20 @@ export default function App() {
         descontoFamiliaTipo: "nenhum" as const,
         descontoFamiliaValor: 0,
         statusFinanceiro: "Em Dia" as const,
-        observacoes: "Aluno sincronizado."
+        observacoes: "Aluno autenticado.",
+        userId: userProfile.uid,
+        rg: userProfile.rg || "",
+        telefone: userProfile.telefone || userProfile.celular || "",
+        whatsapp: userProfile.whatsapp || userProfile.celular || "",
+        endereco: userProfile.endereco || "",
+        responsavel: userProfile.responsavel || "",
+        foto: userProfile.foto || "",
+        dataMatricula: new Date().toISOString().split("T")[0]
       } as Aluno;
     }
   } else {
-    // Se for Admin/Instrutor, mostramos um aluno de mockup para visualizações se existirem alunos
-    defaultStudent = alunos.find(a => a.id === "stu_1") || alunos[0];
+    // Para Administrador e Instrutor, NUNCA vincular um aluno da lista como perfil pessoal
+    defaultStudent = undefined;
   }
 
   const defaultStudentTurma = defaultStudent ? turmas.find(t => t.id === defaultStudent.turmaId) : undefined;
@@ -2704,7 +2718,7 @@ export default function App() {
                 sendPasswordReset={sendPasswordReset}
                 logout={logout}
                 onUpdateCadastro={handleUpdateCadastroProfile}
-                alunoFicha={defaultStudent}
+                alunoFicha={userProfile?.role === "ALUNO" ? defaultStudent : undefined}
               />
 
               {/* Global Config Settings Form ONLY if ADMIN */}

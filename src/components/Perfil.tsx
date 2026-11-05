@@ -47,34 +47,86 @@ export function Perfil({
   alunoFicha
 }: PerfilProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [nome, setNome] = useState(alunoFicha?.nome || userProfile?.nome || user?.displayName || "");
-  const [celular, setCelular] = useState(alunoFicha?.celular || userProfile?.celular || userProfile?.telefone || "");
-  const [endereco, setEndereco] = useState(alunoFicha?.endereco || userProfile?.endereco || "");
+  const [profileImgError, setProfileImgError] = useState(false);
+
+  const isUserAluno = userProfile?.role === "ALUNO" || activeRole === "ALUNO";
+  const isMasterAdmin = user?.email === "deciopadovanijr@gmail.com";
+
+  // Resolver nome real do usuário autenticado evitando contaminação por dados de ficha de alunos
+  const resolveInitialNome = () => {
+    if (isMasterAdmin) {
+      if (!userProfile?.nome || userProfile.nome.toLowerCase().includes("fabiana")) {
+        return "Décio Padovani Jr.";
+      }
+      return userProfile.nome;
+    }
+    if (isUserAluno) {
+      return alunoFicha?.nome || userProfile?.nome || user?.displayName || "";
+    }
+    return userProfile?.nome || user?.displayName || (userProfile?.role === "ADMIN" ? "Administrador" : "Instrutor");
+  };
+
+  const resolveInitialCelular = () => {
+    if (isUserAluno) {
+      return alunoFicha?.celular || alunoFicha?.telefone || userProfile?.celular || userProfile?.telefone || "";
+    }
+    return userProfile?.celular || userProfile?.telefone || "";
+  };
+
+  const resolveInitialEndereco = () => {
+    if (isUserAluno) {
+      return alunoFicha?.endereco || userProfile?.endereco || "";
+    }
+    return userProfile?.endereco || "";
+  };
+
+  const [nome, setNome] = useState(resolveInitialNome());
+  const [celular, setCelular] = useState(resolveInitialCelular());
+  const [endereco, setEndereco] = useState(resolveInitialEndereco());
   
-  // Novos campos específicos de aluno para auditoria e completude
-  const [cpf, setCpf] = useState(alunoFicha?.cpf || "");
-  const [rg, setRg] = useState(alunoFicha?.rg || "");
-  const [dataNascimento, setDataNascimento] = useState(alunoFicha?.dataNascimento || "2000-01-01");
-  const [foto, setFoto] = useState(alunoFicha?.foto || "");
-  const [responsavel, setResponsavel] = useState(alunoFicha?.responsavel || "");
+  // Campos específicos de aluno para auditoria e completude
+  const [cpf, setCpf] = useState(isUserAluno ? (alunoFicha?.cpf || userProfile?.cpf || "") : (userProfile?.cpf || ""));
+  const [rg, setRg] = useState(isUserAluno ? (alunoFicha?.rg || userProfile?.rg || "") : (userProfile?.rg || ""));
+  const [dataNascimento, setDataNascimento] = useState(
+    isUserAluno 
+      ? (alunoFicha?.dataNascimento || userProfile?.dataNascimento || "2000-01-01") 
+      : (userProfile?.dataNascimento || "")
+  );
+  const [foto, setFoto] = useState(
+    isUserAluno 
+      ? (alunoFicha?.foto || userProfile?.foto || user?.photoURL || "") 
+      : (userProfile?.foto || user?.photoURL || "")
+  );
+  const [responsavel, setResponsavel] = useState(isUserAluno ? (alunoFicha?.responsavel || "") : "");
 
   const [isSaving, setIsSaving] = useState(false);
 
-  // Sync state with props if they load later
+  // Sincronizar estado estritamente com os dados do usuário autenticado
   React.useEffect(() => {
-    if (userProfile) {
-      if (!nome) setNome(userProfile.nome || user?.displayName || "");
-      if (!celular) setCelular(userProfile.celular || userProfile.telefone || "");
-      if (!endereco) setEndereco(userProfile.endereco || "");
+    if (!isUserAluno) {
+      // Perfil de Administrador ou Instrutor
+      let adminNome = userProfile?.nome || user?.displayName || "";
+      if (isMasterAdmin && (!adminNome || adminNome.toLowerCase().includes("fabiana"))) {
+        adminNome = "Décio Padovani Jr.";
+      }
+      if (adminNome) setNome(adminNome);
+      if (userProfile?.celular || userProfile?.telefone) setCelular(userProfile.celular || userProfile.telefone || "");
+      if (userProfile?.endereco) setEndereco(userProfile.endereco);
+      if (userProfile?.foto || user?.photoURL) setFoto(userProfile?.foto || user?.photoURL || "");
+    } else {
+      // Perfil de Aluno
+      if (alunoFicha?.nome || userProfile?.nome) setNome(alunoFicha?.nome || userProfile?.nome || user?.displayName || "");
+      if (alunoFicha?.celular || alunoFicha?.telefone || userProfile?.celular) {
+        setCelular(alunoFicha?.celular || alunoFicha?.telefone || userProfile?.celular || "");
+      }
+      if (alunoFicha?.endereco || userProfile?.endereco) setEndereco(alunoFicha?.endereco || userProfile?.endereco || "");
+      if (alunoFicha?.cpf) setCpf(alunoFicha.cpf);
+      if (alunoFicha?.rg) setRg(alunoFicha.rg);
+      if (alunoFicha?.dataNascimento && alunoFicha.dataNascimento !== "2000-01-01") setDataNascimento(alunoFicha.dataNascimento);
+      if (alunoFicha?.foto || userProfile?.foto) setFoto(alunoFicha?.foto || userProfile?.foto || user?.photoURL || "");
+      if (alunoFicha?.responsavel) setResponsavel(alunoFicha.responsavel);
     }
-    if (alunoFicha) {
-      if (!cpf) setCpf(alunoFicha.cpf || "");
-      if (!rg) setRg(alunoFicha.rg || "");
-      if (dataNascimento === "2000-01-01" && alunoFicha.dataNascimento) setDataNascimento(alunoFicha.dataNascimento);
-      if (!foto) setFoto(alunoFicha.foto || "");
-      if (!responsavel) setResponsavel(alunoFicha.responsavel || "");
-    }
-  }, [userProfile, alunoFicha]);
+  }, [userProfile, alunoFicha, isUserAluno, isMasterAdmin, user]);
 
   // Completude do Aluno
   const completudeInfo = (() => {
@@ -235,12 +287,13 @@ export function Perfil({
       {/* User Card */}
       <div className="bg-zinc-950 border border-zinc-900 p-5 rounded-3xl text-left flex flex-col sm:flex-row items-center gap-4 relative">
         <div className="w-18 h-18 rounded-3xl bg-zinc-900 border-2 border-amber-500 flex items-center justify-center text-2xl font-black text-white shadow-lg flex-shrink-0 overflow-hidden">
-          {alunoFicha?.foto || userProfile?.foto ? (
+          {(!isUserAluno ? (userProfile?.foto || user?.photoURL) : (alunoFicha?.foto || userProfile?.foto || user?.photoURL)) && !profileImgError ? (
             <img 
-              src={alunoFicha?.foto || userProfile?.foto} 
+              src={!isUserAluno ? (userProfile?.foto || user?.photoURL) : (alunoFicha?.foto || userProfile?.foto || user?.photoURL)} 
               alt="Foto Perfil" 
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
+              onError={() => setProfileImgError(true)}
             />
           ) : (
             <span>🥋</span>
@@ -249,7 +302,19 @@ export function Perfil({
         <div className="text-center sm:text-left space-y-2 flex-grow">
           <p className="text-[9px] text-zinc-500 font-mono uppercase tracking-widest leading-none">Perfil de Praia Grande</p>
           <div className="space-y-1.5 text-zinc-350 text-xs text-left">
-            <div><span className="text-zinc-500 font-mono uppercase tracking-wider text-[9px]">Nome:</span> <strong className="text-white text-sm uppercase">{alunoFicha?.nome || userProfile?.nome || user?.displayName || "Usuário"}</strong></div>
+            <div>
+              <span className="text-zinc-500 font-mono uppercase tracking-wider text-[9px]">Nome:</span> <strong className="text-white text-sm uppercase">
+                {!isUserAluno 
+                  ? (isMasterAdmin ? (userProfile?.nome && !userProfile.nome.toLowerCase().includes("fabiana") ? userProfile.nome : "Décio Padovani Jr.") : (userProfile?.nome || user?.displayName || "Administrador"))
+                  : (alunoFicha?.nome || userProfile?.nome || user?.displayName || "Aluno")
+                }
+              </strong>
+              {isUserAluno && alunoFicha?.matricula && (
+                <span className="ml-2.5 px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-amber-400 font-mono text-[9px] font-black">
+                  {alunoFicha.matricula}
+                </span>
+              )}
+            </div>
             <div><span className="text-zinc-500 font-mono uppercase tracking-wider text-[9px]">E-mail:</span> <span className="text-zinc-200 font-mono">{user?.email}</span></div>
             
             <div className="flex flex-wrap items-center gap-2">
@@ -259,7 +324,7 @@ export function Perfil({
               </strong>
               
               {/* STATUS OPERACIONAL DA FICHA DO ALUNO */}
-              {activeRole === "ALUNO" && alunoFicha && (
+              {isUserAluno && alunoFicha && (
                 <>
                   <span className="text-zinc-650 font-mono">•</span>
                   <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase font-mono border ${
@@ -275,12 +340,14 @@ export function Perfil({
               )}
             </div>
 
-            {(alunoFicha?.celular || userProfile?.celular) && (
-              <div><span className="text-zinc-500 font-mono uppercase tracking-wider text-[9px]">Tel:</span> <span className="text-zinc-350 font-mono">{alunoFicha?.celular || userProfile?.celular}</span></div>
+            {(!isUserAluno ? (userProfile?.celular || userProfile?.telefone) : (alunoFicha?.celular || userProfile?.celular)) ? (
+              <div><span className="text-zinc-500 font-mono uppercase tracking-wider text-[9px]">Tel:</span> <span className="text-zinc-350 font-mono">{!isUserAluno ? (userProfile?.celular || userProfile?.telefone) : (alunoFicha?.celular || userProfile?.celular)}</span></div>
+            ) : (
+              <div><span className="text-zinc-500 font-mono uppercase tracking-wider text-[9px]">Tel:</span> <span className="text-zinc-500 italic text-[11px]">Não informado</span></div>
             )}
             
             {/* Campos extras na visualização rápida do aluno */}
-            {activeRole === "ALUNO" && alunoFicha && (
+            {isUserAluno && alunoFicha && (
               <>
                 <div className="grid grid-cols-2 gap-x-3 gap-y-1 pt-1 border-t border-zinc-900 text-[11px]">
                   <div>
@@ -307,8 +374,8 @@ export function Perfil({
               </>
             )}
 
-            {(alunoFicha?.endereco || userProfile?.endereco) && (
-              <div className="line-clamp-1 pt-0.5"><span className="text-zinc-500 font-mono uppercase tracking-wider text-[9px]">📍 Endereço:</span> <span className="text-zinc-350">{alunoFicha?.endereco || userProfile?.endereco}</span></div>
+            {(!isUserAluno ? userProfile?.endereco : (alunoFicha?.endereco || userProfile?.endereco)) && (
+              <div className="line-clamp-1 pt-0.5"><span className="text-zinc-500 font-mono uppercase tracking-wider text-[9px]">📍 Endereço:</span> <span className="text-zinc-350">{!isUserAluno ? userProfile?.endereco : (alunoFicha?.endereco || userProfile?.endereco)}</span></div>
             )}
           </div>
         </div>
@@ -390,17 +457,6 @@ export function Perfil({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[9px] font-mono font-bold text-zinc-500 uppercase flex items-center gap-1"><Image className="w-3" /> Link da Foto de Perfil (URL)</label>
-                  <input
-                    type="text"
-                    value={foto}
-                    onChange={(e) => setFoto(e.target.value)}
-                    placeholder="https://exemplo.com/suaframe.jpg"
-                    className="w-full p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
-                  />
-                </div>
-
-                <div className="space-y-1">
                   <label className="text-[9px] font-mono font-bold text-zinc-500 uppercase flex items-center gap-1">
                     <User className="w-3" /> Responsável Legal {completudeInfo.isMenor && <span className="text-red-500 font-bold ml-1">* (Obrigatório por ser menor)</span>}
                   </label>
@@ -414,6 +470,17 @@ export function Perfil({
                 </div>
               </>
             )}
+
+            <div className="space-y-1">
+              <label className="text-[9px] font-mono font-bold text-zinc-500 uppercase flex items-center gap-1"><Image className="w-3" /> Link da Foto de Perfil (URL)</label>
+              <input
+                type="text"
+                value={foto}
+                onChange={(e) => setFoto(e.target.value)}
+                placeholder="https://exemplo.com/suafoto.jpg"
+                className="w-full p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+              />
+            </div>
 
             <div className="space-y-1">
               <label className="text-[9px] font-mono font-bold text-zinc-500 uppercase flex items-center gap-1"><MapPin className="w-3" /> Endereço Residencial</label>
